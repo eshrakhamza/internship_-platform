@@ -1,11 +1,17 @@
+// lib/api-client.ts
 import axios from 'axios';
 
+// Use the environment variable with correct fallback
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
 export const apiClient = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api',
+  baseURL: `${API_URL}/api`, // Add /api here since your routes are /api/...
   headers: {
     'Content-Type': 'application/json',
   },
 });
+
+console.log('🔧 API Client configured with baseURL:', apiClient.defaults.baseURL);
 
 // Add request interceptor
 apiClient.interceptors.request.use(
@@ -16,6 +22,7 @@ apiClient.interceptors.request.use(
         config.headers.Authorization = `Bearer ${token}`;
       }
     }
+    console.log('🚀 API Request:', config.method?.toUpperCase(), config.url);
     return config;
   },
   (error) => Promise.reject(error)
@@ -23,7 +30,10 @@ apiClient.interceptors.request.use(
 
 // Add response interceptor
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log('✅ API Response:', response.status, response.config.url);
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
     if (error.response?.status === 401 && !originalRequest._retry) {
@@ -32,7 +42,7 @@ apiClient.interceptors.response.use(
         if (typeof window !== 'undefined') {
           const refreshToken = localStorage.getItem('refreshToken');
           const response = await axios.post(
-            `${process.env.NEXT_PUBLIC_API_URL}/auth/refresh`,
+            `${API_URL}/api/auth/refresh`,
             {},
             {
               headers: { Authorization: `Bearer ${refreshToken}` },

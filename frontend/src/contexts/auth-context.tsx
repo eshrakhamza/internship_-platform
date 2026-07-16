@@ -1,3 +1,4 @@
+// contexts/auth-context.tsx
 'use client';
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
@@ -27,15 +28,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    // Check for existing session on mount
     if (typeof window !== 'undefined') {
       const token = localStorage.getItem('accessToken');
+      console.log('🔑 Token found on load:', !!token);
+      
       if (token) {
         const storedUser = localStorage.getItem('user');
         if (storedUser) {
           try {
-            setUser(JSON.parse(storedUser));
+            const parsedUser = JSON.parse(storedUser);
+            setUser(parsedUser);
+            console.log('👤 User loaded:', parsedUser.email);
           } catch (e) {
             console.error('Failed to parse user:', e);
+            localStorage.removeItem('user');
+            localStorage.removeItem('accessToken');
           }
         }
       }
@@ -50,12 +58,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, otp: string) => {
     const response = await apiClient.post('/auth/verify-otp', { email, otp });
     const { accessToken, refreshToken, user } = response.data;
+    
     if (typeof window !== 'undefined') {
       localStorage.setItem('accessToken', accessToken);
       localStorage.setItem('refreshToken', refreshToken);
       localStorage.setItem('user', JSON.stringify(user));
     }
     setUser(user);
+    console.log('✅ Login successful:', user.email);
   };
 
   const logout = () => {
@@ -65,6 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem('user');
     }
     setUser(null);
+    console.log('👋 User logged out');
   };
 
   return (
