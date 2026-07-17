@@ -48,30 +48,51 @@ export default function ApplicationPage() {
     }
   }, [isAuthenticated, isLoading]);
 
-  const fetchApplication = async () => {
+ // app/application/page.tsx - Replace fetchApplication
+
+const fetchApplication = async () => {
     setLoading(true);
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
       const token = localStorage.getItem('accessToken');
+      
+      console.log('🔍 Fetching application from:', `${API_URL}/api/applications/my-application`);
       
       const response = await fetch(`${API_URL}/api/applications/my-application`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
       });
-
+  
+      console.log('📨 Response status:', response.status);
+  
       if (response.ok) {
         const data = await response.json();
-        setApplication(data);
+        console.log('📨 Application data received:', data);
+        
+        // Validate the data structure
+        if (data && data.id && data.candidate && data.candidate.user) {
+          setApplication(data);
+        } else {
+          console.error('Invalid data structure:', data);
+          toast.error('Received invalid application data');
+          router.push('/dashboard');
+        }
       } else if (response.status === 404) {
         toast.error('No application found');
         router.push('/dashboard');
+      } else if (response.status === 401) {
+        toast.error('Please login again');
+        router.push('/login');
       } else {
-        throw new Error('Failed to fetch application');
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Error response:', errorData);
+        throw new Error(errorData.message || 'Failed to fetch application');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching application:', error);
-      toast.error('Failed to load application');
+      toast.error(error.message || 'Failed to load application');
+      // Don't redirect immediately, let the user see the error
     } finally {
       setLoading(false);
     }

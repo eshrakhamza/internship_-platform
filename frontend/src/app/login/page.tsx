@@ -1,30 +1,47 @@
+// app/login/page.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/auth-context';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
-import { Mail, Lock, ArrowRight, CheckCircle, Sparkles } from 'lucide-react';
+import { Mail, Lock, ArrowRight, CheckCircle, Sparkles, Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<'email' | 'otp'>('email');
-  const { sendOTP, login } = useAuth();
+  const { sendOTP, login, user, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      if (user?.role === 'RECRUITER' || user?.role === 'ADMIN') {
+        router.push('/recruiter/dashboard');
+      } else {
+        router.push('/dashboard');
+      }
+    }
+  }, [isAuthenticated, isLoading, user, router]);
 
   const handleSendOTP = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!email) {
+      toast.error('Please enter your email');
+      return;
+    }
+    
     setLoading(true);
     try {
       await sendOTP(email);
       setStep('otp');
       toast.success('OTP sent successfully!');
-    } catch (error) {
-      toast.error('Failed to send OTP. Please try again.');
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to send OTP. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -32,17 +49,30 @@ export default function LoginPage() {
 
   const handleVerifyOTP = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!otp) {
+      toast.error('Please enter the OTP');
+      return;
+    }
+    
     setLoading(true);
     try {
       await login(email, otp);
-      toast.success('Login successful!');
-      router.push('/dashboard');
-    } catch (error) {
-      toast.error('Invalid OTP. Please try again.');
+      // Redirect is handled in the auth context
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Invalid OTP. Please try again.');
     } finally {
       setLoading(false);
     }
   };
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex bg-gradient-to-br from-slate-50 via-white to-blue-50">
@@ -92,8 +122,17 @@ export default function LoginPage() {
                 className="w-full h-12 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg shadow-blue-500/25"
                 disabled={loading}
               >
-                {loading ? 'Sending...' : 'Send OTP'}
-                <ArrowRight className="ml-2 w-4 h-4" />
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    Send OTP
+                    <ArrowRight className="ml-2 w-4 h-4" />
+                  </>
+                )}
               </Button>
 
               <div className="text-center">
@@ -141,8 +180,17 @@ export default function LoginPage() {
                 className="w-full h-12 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg shadow-blue-500/25"
                 disabled={loading}
               >
-                {loading ? 'Verifying...' : 'Verify OTP'}
-                <ArrowRight className="ml-2 w-4 h-4" />
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    Verifying...
+                  </>
+                ) : (
+                  <>
+                    Verify OTP
+                    <ArrowRight className="ml-2 w-4 h-4" />
+                  </>
+                )}
               </Button>
 
               <Button

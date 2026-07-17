@@ -127,33 +127,34 @@ export default function DashboardPage() {
     }
   };
 
-  const handleAction = async (action: {
-    type: string;
-    label: string;
-    description: string;
-    icon: string;
-    campaignId?: string;
-    resultId?: string;
-  }) => {
-    switch (action.type) {
-      case 'take_assessment':
-        if (action.campaignId) {
-          router.push(`/assessment/${action.campaignId}`);
-        }
-        break;
-      case 'view_results':
-        if (action.resultId) {
-          router.push(`/assessment/results/${action.resultId}`);
-        }
-        break;
-      case 'view_application':
-        router.push('/application');
-        break;
-      default:
-        toast.success('Feature coming soon!');
-    }
-  };
+ // app/dashboard/page.tsx - In handleAction
 
+const handleAction = async (action: {
+  type: string;
+  label: string;
+  description: string;
+  icon: string;
+  campaignId?: string;
+  resultId?: string;
+}) => {
+  switch (action.type) {
+    case 'take_assessment':
+      if (action.campaignId) {
+        router.push(`/assessment/${action.campaignId}`);
+      }
+      break;
+    case 'view_results':
+      if (action.resultId) {
+        router.push(`/assessment/results/${action.resultId}`);
+      }
+      break;
+    case 'view_application':
+      router.push('/application');
+      break;
+    default:
+      toast.success('Feature coming soon!');
+  }
+};
   // ADDED: Loading state while auth is being checked
   if (isLoading || loading) {
     return (

@@ -3,6 +3,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import apiClient from '../lib/api-client';
+import { useRouter } from 'next/navigation';
 
 interface User {
   id: string;
@@ -26,6 +27,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
     // Check for existing session on mount
@@ -40,6 +42,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const parsedUser = JSON.parse(storedUser);
             setUser(parsedUser);
             console.log('👤 User loaded:', parsedUser.email);
+            
+            // Redirect based on role if on login page
+            const pathname = window.location.pathname;
+            if (pathname === '/login' || pathname === '/') {
+              if (parsedUser.role === 'RECRUITER' || parsedUser.role === 'ADMIN') {
+                window.location.href = '/recruiter/dashboard';
+              } else {
+                window.location.href = '/dashboard';
+              }
+            }
           } catch (e) {
             console.error('Failed to parse user:', e);
             localStorage.removeItem('user');
@@ -66,6 +78,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setUser(user);
     console.log('✅ Login successful:', user.email);
+    
+    // Redirect based on role
+    if (user.role === 'RECRUITER' || user.role === 'ADMIN') {
+      window.location.href = '/recruiter/dashboard';
+    } else {
+      window.location.href = '/dashboard';
+    }
   };
 
   const logout = () => {
@@ -76,6 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setUser(null);
     console.log('👋 User logged out');
+    window.location.href = '/login';
   };
 
   return (
