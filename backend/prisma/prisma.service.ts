@@ -3,6 +3,8 @@ import { PrismaClient } from '@prisma/client';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+  // REMOVED: internshipPosting: any; - This is already defined in PrismaClient
+  
   constructor() {
     super({
       log: ['query', 'info', 'warn', 'error'],
@@ -39,6 +41,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       'candidate',
       'file',
       'user',
+      'internshipPosting', // ← Add this since it exists in your schema
     ];
 
     for (const model of models) {

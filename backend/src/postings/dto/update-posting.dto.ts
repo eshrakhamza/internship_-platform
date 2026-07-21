@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsOptional, IsEnum, IsBoolean, IsDateString, IsArray } from 'class-validator';
-import { Theme } from '@prisma/client';
+import { Theme, PostingStatus } from '@prisma/client';
 
 export class UpdatePostingDto {
   @ApiProperty({ description: 'Internship title', required: false })
@@ -54,8 +54,8 @@ export class UpdatePostingDto {
   @IsBoolean()
   isRemote?: boolean;
 
-  @ApiProperty({ description: 'Status', required: false, enum: ['DRAFT', 'PUBLISHED', 'ARCHIVED'] })
+  @ApiProperty({ enum: PostingStatus, description: 'Status', required: false })
   @IsOptional()
-  @IsEnum(['DRAFT', 'PUBLISHED', 'ARCHIVED'])
-  status?: string;
+  @IsEnum(PostingStatus)
+  status?: PostingStatus;
 }

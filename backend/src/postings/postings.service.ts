@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException, BadRequestException } from '@nes
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreatePostingDto } from './dto/create-posting.dto';
 import { UpdatePostingDto } from './dto/update-posting.dto';
+import { PostingStatus } from '@prisma/client';
 
 @Injectable()
 export class PostingsService {
@@ -12,25 +13,30 @@ export class PostingsService {
   async create(userId: string, dto: CreatePostingDto) {
     this.logger.log(`Creating internship posting by user: ${userId}`);
 
-    const posting = await this.prisma.internshipPosting.create({
-      data: {
-        title: dto.title,
-        description: dto.description,
-        theme: dto.theme,
-        requiredSkills: dto.requiredSkills,
-        preferredSkills: dto.preferredSkills || [],
-        startDate: new Date(dto.startDate),
-        endDate: new Date(dto.endDate),
-        positions: dto.positions || 1,
-        location: dto.location,
-        isRemote: dto.isRemote || false,
-        status: dto.status || 'DRAFT',
-        createdBy: userId,
-      },
-    });
+    try {
+      const posting = await this.prisma.internshipPosting.create({
+        data: {
+          title: dto.title,
+          description: dto.description,
+          theme: dto.theme,
+          requiredSkills: dto.requiredSkills,
+          preferredSkills: dto.preferredSkills || [],
+          startDate: new Date(dto.startDate),
+          endDate: new Date(dto.endDate),
+          positions: dto.positions || 1,
+          location: dto.location,
+          isRemote: dto.isRemote || false,
+          status: dto.status || PostingStatus.DRAFT,
+          createdBy: userId,
+        },
+      });
 
-    this.logger.log(`Internship posting created: ${posting.id}`);
-    return posting;
+      this.logger.log(`Internship posting created: ${posting.id}`);
+      return posting;
+    } catch (error) {
+      this.logger.error(`Error creating posting: ${error.message}`);
+      throw error;
+    }
   }
 
   async findAll(page: number = 1, limit: number = 10, filters?: any) {
@@ -46,12 +52,48 @@ export class PostingsService {
       ];
     }
 
-    const [postings, total] = await Promise.all([
-      this.prisma.internshipPosting.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { createdAt: 'desc' },
+    try {
+      const [postings, total] = await Promise.all([
+        this.prisma.internshipPosting.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            creator: {
+              select: {
+                firstName: true,
+                lastName: true,
+                email: true,
+              },
+            },
+            _count: {
+              select: {
+                applications: true,
+              },
+            },
+          },
+        }),
+        this.prisma.internshipPosting.count({ where }),
+      ]);
+
+      return {
+        data: postings,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      };
+    } catch (error) {
+      this.logger.error(`Error fetching postings: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async findOne(id: string) {
+    try {
+      const posting = await this.prisma.internshipPosting.findUnique({
+        where: { id },
         include: {
           creator: {
             select: {
@@ -60,59 +102,33 @@ export class PostingsService {
               email: true,
             },
           },
-          _count: {
-            select: {
-              applications: true,
-            },
-          },
-        },
-      }),
-      this.prisma.internshipPosting.count({ where }),
-    ]);
-
-    return {
-      data: postings,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    };
-  }
-
-  async findOne(id: string) {
-    const posting = await this.prisma.internshipPosting.findUnique({
-      where: { id },
-      include: {
-        creator: {
-          select: {
-            firstName: true,
-            lastName: true,
-            email: true,
-          },
-        },
-        applications: {
-          include: {
-            candidate: {
-              include: {
-                user: {
-                  select: {
-                    firstName: true,
-                    lastName: true,
-                    email: true,
+          applications: {
+            include: {
+              candidate: {
+                include: {
+                  user: {
+                    select: {
+                      firstName: true,
+                      lastName: true,
+                      email: true,
+                    },
                   },
                 },
               },
             },
           },
         },
-      },
-    });
+      });
 
-    if (!posting) {
-      throw new NotFoundException('Internship posting not found');
+      if (!posting) {
+        throw new NotFoundException('Internship posting not found');
+      }
+
+      return posting;
+    } catch (error) {
+      this.logger.error(`Error fetching posting ${id}: ${error.message}`);
+      throw error;
     }
-
-    return posting;
   }
 
   async update(id: string, dto: UpdatePostingDto) {
@@ -151,7 +167,7 @@ export class PostingsService {
     return this.prisma.internshipPosting.update({
       where: { id },
       data: {
-        status: 'PUBLISHED',
+        status: PostingStatus.PUBLISHED,
         publishedAt: new Date(),
       },
     });
@@ -167,7 +183,7 @@ export class PostingsService {
     return this.prisma.internshipPosting.update({
       where: { id },
       data: {
-        status: 'ARCHIVED',
+        status: PostingStatus.ARCHIVED,
         archivedAt: new Date(),
       },
     });
