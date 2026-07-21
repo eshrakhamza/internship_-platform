@@ -69,6 +69,14 @@ export function Navbar() {
                   <ClipboardList className="w-4 h-4" />
                   <span>Assessments</span>
                 </Link>
+                
+<Link 
+  href="/recruiter/postings" 
+  className="flex items-center space-x-1 text-gray-600 hover:text-blue-600 transition-colors"
+>
+  <Briefcase className="w-4 h-4" />
+  <span>Postings</span>
+</Link>
               </>
             ) : isCandidate ? (
               // Candidate Navigation
@@ -87,6 +95,13 @@ export function Navbar() {
                   <FileText className="w-4 h-4" />
                   <span>Apply</span>
                 </Link>
+                <Link 
+  href="/assessments" 
+  className="flex items-center space-x-1 text-gray-600 hover:text-blue-600 transition-colors"
+>
+  <ClipboardList className="w-4 h-4" />
+  <span>Assessments</span>
+</Link>
               </>
             ) : null}
           </div>

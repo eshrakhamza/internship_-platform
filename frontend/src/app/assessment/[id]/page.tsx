@@ -65,11 +65,12 @@ export default function TakeAssessmentPage() {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
       const token = localStorage.getItem('accessToken');
       
-      const response = await fetch(`${API_URL}/api/assessments/${assessmentId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
+    // In fetchAssessment, use the new endpoint
+const response = await fetch(`${API_URL}/api/assessments/candidate/${assessmentId}/take`, {
+  headers: {
+    'Authorization': `Bearer ${token}`,
+  },
+});
 
       if (response.ok) {
         const data = await response.json();
