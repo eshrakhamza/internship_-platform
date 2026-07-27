@@ -209,7 +209,7 @@ export default function ApplyPage() {
       
       // IMPORTANT: Use EXACT field names as expected by backend DTO
       formDataObj.append('firstName', formData.firstName);
-      formDataObj.append('lastName', formData.lastName);
+      formDataObj.append('lastName', formData.lastName)
       formDataObj.append('email', formData.email);
       formDataObj.append('phoneNumber', formData.phoneNumber || '');
       formDataObj.append('school', formData.school);

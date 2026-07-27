@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+  [x: string]: any;
   // REMOVED: internshipPosting: any; - This is already defined in PrismaClient
   
   constructor() {

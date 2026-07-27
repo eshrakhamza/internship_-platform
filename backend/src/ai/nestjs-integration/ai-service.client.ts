@@ -1,6 +1,7 @@
 import { HttpService } from '@nestjs/axios';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import FormData from 'form-data';
 import { firstValueFrom } from 'rxjs';
 
 // ---- Types matching the FastAPI Pydantic schemas ----
@@ -68,10 +69,12 @@ export class AiServiceClient {
 
   async extractCv(fileBuffer: Buffer, filename: string): Promise<ExtractionResponse> {
     const form = new FormData();
-    form.append('file', new Blob([fileBuffer], { type: 'application/pdf' }), filename);
+    form.append('file', fileBuffer, { filename, contentType: 'application/pdf' });
 
     const { data } = await firstValueFrom(
-      this.http.post<ExtractionResponse>('/extraction/cv', form, { headers: this.headers }),
+      this.http.post<ExtractionResponse>('/extraction/cv', form, {
+        headers: { ...this.headers, ...form.getHeaders() },
+      }),
     );
     return data;
   }
@@ -161,5 +164,22 @@ export class AiServiceClient {
       ),
     );
     return data;
+  }
+
+  /**
+   * Raw prompt -> raw text passthrough via Groq. Used by flows that have
+   * their own custom prompt-building and text-parsing logic already
+   * (e.g. the application-scoring flow migrated from Ollama) so that
+   * logic doesn't need to change — only the model backend does.
+   */
+  async generateAnalysis(prompt: string, system?: string): Promise<string> {
+    const { data } = await firstValueFrom(
+      this.http.post<{ text: string }>(
+        '/analysis/generate',
+        { prompt, system },
+        { headers: this.headers },
+      ),
+    );
+    return data.text;
   }
 }

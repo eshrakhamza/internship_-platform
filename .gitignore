@@ -56,3 +56,124 @@ pids
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 /generated/prisma
+
+# ==========================================
+# PYTHON / AI-SERVICE SPECIFIC
+# ==========================================
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+*.pyo
+
+# Virtual environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+pythonenv*
+*/venv/
+**/venv/
+
+# Python distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Python testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+*.cover
+.hypothesis/
+nosetests.xml
+coverage.xml
+
+# Pyenv
+.python-version
+
+# Pipenv
+Pipfile.lock
+
+# Poetry
+poetry.lock
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+
+# AI-Service specific
+ai-service/venv/
+ai-service/__pycache__/
+ai-service/**/__pycache__/
+ai-service/.env
+ai-service/.env.local
+
+# ==========================================
+# BACKEND SPECIFIC
+# ==========================================
+
+# Prisma
+*.db
+*.sqlite
+*.sqlite3
+prisma/*.db
+prisma/*.sqlite
+
+# ==========================================
+# FRONTEND SPECIFIC
+# ==========================================
+
+# Next.js
+/.next/
+/out/
+/frontend/.next/
+/frontend/out/
+/frontend/node_modules/
+
+# ==========================================
+# DOCKER
+# ==========================================
+
+*.pid
+*.pid.lock
+
+# ==========================================
+# MISC
+# ==========================================
+
+# Backup files
+*.bak
+*.backup
+*.swp
+*.swo
+*~
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Local development files
+C:\Users\MSI-GT\in\

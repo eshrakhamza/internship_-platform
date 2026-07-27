@@ -46,7 +46,7 @@ export class AiService {
           top_p: 0.9,
         },
       });
-      
+
       this.logger.log('Ollama response received');
       return response.data.response;
     } catch (error) {
@@ -90,12 +90,12 @@ export class AiService {
     try {
       this.logger.log('Generating AI analysis with Ollama...');
       const prompt = this.buildAnalysisPrompt(application);
-      
+
       const analysisText = await this.callOllama(prompt);
-      
+
       this.logger.log(`Ollama response received (${analysisText.length} characters)`);
       this.logger.debug(`Response: ${analysisText.substring(0, 200)}...`);
-      
+
       const analysis = this.parseAnalysis(analysisText);
 
       const savedAnalysis = await this.prisma.aIAnalysis.create({
@@ -169,22 +169,22 @@ export class AiService {
       score: 75,
       explanation: '',
     };
-  
+
     // Log the raw response for debugging
     this.logger.debug(`Raw Ollama response: ${text.substring(0, 500)}...`);
-  
+
     // Try multiple parsing strategies
     const lines = text.split('\n');
     let currentSection = '';
     let summaryLines: string[] = [];
     let explanationLines: string[] = [];
-  
+
     for (const line of lines) {
       const trimmedLine = line.trim();
-      
+
       // Skip empty lines
       if (!trimmedLine) continue;
-  
+
       // Check for section headers (## SUMMARY, ## THEME, etc.)
       if (trimmedLine.startsWith('## SUMMARY')) {
         currentSection = 'summary';
@@ -199,7 +199,7 @@ export class AiService {
         currentSection = 'explanation';
         continue;
       }
-  
+
       // Also check for the format we originally wanted
       if (trimmedLine.startsWith('SUMMARY:')) {
         result.summary = trimmedLine.replace('SUMMARY:', '').trim();
@@ -222,7 +222,7 @@ export class AiService {
         result.explanation = trimmedLine.replace('EXPLANATION:', '').trim();
         continue;
       }
-  
+
       // Collect content based on current section
       if (currentSection === 'summary') {
         // Skip lines that are just **bold** markers
@@ -258,17 +258,17 @@ export class AiService {
         }
       }
     }
-  
+
     // If we collected summary lines, join them
     if (summaryLines.length > 0) {
       result.summary = summaryLines.join(' ').trim();
     }
-  
+
     // If we collected explanation lines, join them
     if (explanationLines.length > 0) {
       result.explanation = explanationLines.join(' ').trim();
     }
-  
+
     // If we couldn't parse anything meaningful, use fallback
     if (!result.summary && !result.explanation) {
       this.logger.warn('Could not parse AI response, using fallback values');
@@ -277,16 +277,16 @@ export class AiService {
       result.score = 70;
       result.explanation = 'Application shows good effort and relevant skills. Manual review recommended.';
     }
-  
+
     this.logger.debug(`Parsed result - Summary: ${result.summary.substring(0, 100)}...`);
     this.logger.debug(`Parsed result - Theme: ${result.theme}, Score: ${result.score}`);
-  
+
     return result;
   }
 
   private createFallbackAnalysis(application: any): any {
     this.logger.log(`Creating fallback analysis for application: ${application.id}`);
-    
+
     return {
       id: 'fallback-' + Date.now(),
       applicationId: application.id,
@@ -303,7 +303,9 @@ export class AiService {
   async analyzeAllPendingApplications() {
     const applications = await this.prisma.application.findMany({
       where: {
-        aiAnalysis: null,
+        aiAnalyses: {
+          none: {},
+        },
       },
       include: {
         candidate: {

@@ -56,10 +56,10 @@ model Candidate {
   recruiterNotes      RecruiterNote[] @relation("CandidateNotes")
   statusHistories     StatusHistory[] @relation("CandidateStatusHistories")
   aiAnalyses          AIAnalysis[]
+  cvData              CandidateCV?
 
   @@map("candidates")
 }
-
 enum Theme {
   ARTIFICIAL_INTELLIGENCE
   CYBERSECURITY
@@ -88,7 +88,8 @@ model Application {
   
   // Relationships
   candidate           Candidate             @relation(fields: [candidateId], references: [id])
-  aiAnalysis          AIAnalysis?
+  aiAnalyses          AIAnalysis[]
+
   recruiterNotes      RecruiterNote[]       @relation("ApplicationNotes")
   statusHistories     StatusHistory[]       @relation("ApplicationStatusHistories")
   posting             InternshipPosting?    @relation(fields: [postingId], references: [id])
@@ -179,7 +180,28 @@ model AIAnalysis {
 
   @@map("ai_analyses")
 }
+model CandidateCV {
+  id                String    @id @default(uuid())
+  candidateId       String    @unique
+  fileId            String?
+  rawText           String
+  extractionMethod  String
+  fullName          String?
+  email             String?
+  phone             String?
+  skills            String[]
+  experience        Json?
+  education         Json?
+  languages         String[]
+  summary           String?
+  embedding         Json?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
+  candidate         Candidate @relation(fields: [candidateId], references: [id])
+
+  @@map("candidate_cvs")
+}
 model InternshipPosting {
   id              String    @id @default(uuid())
   title           String
