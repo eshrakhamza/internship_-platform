@@ -6,12 +6,31 @@ import { firstValueFrom } from 'rxjs';
 
 // ---- Types matching the FastAPI Pydantic schemas ----
 
+
+
+
+
+
+// ... dans la classe AiServiceClient ...
+
+
 export interface ExtractionResponse {
   text: string;
   method: 'text_layer' | 'ocr';
   page_count: number;
 }
+export interface GeneratedQuestion {
+  type: 'MCQ' | 'OPEN';
+  questionText: string;
+  explanation?: string;
+  expectedAnswer?: string;  // NEW
+  options?: { optionText: string; isCorrect: boolean }[];
+}
 
+export interface QuestionGenerationResponse {
+  questions: GeneratedQuestion[];
+  source: 'groq' | 'gemini';
+}
 export interface Experience {
   title: string;
   company: string;
@@ -25,12 +44,20 @@ export interface Education {
   year?: string;
 }
 
+export interface Project {
+  name: string;
+  period?: string;
+  description?: string;
+  technologies: string[];
+}
+
 export interface StructuredCV {
   full_name?: string;
   email?: string;
   phone?: string;
   skills: string[];
   experience: Experience[];
+  projects: Project[];   // ← add
   education: Education[];
   languages: string[];
   summary?: string;
@@ -39,10 +66,10 @@ export interface StructuredCV {
 export interface MatchExplanationResponse {
   explanation: string;
 }
-
 export interface GradingResponse {
-  score: number;
+  score: number;      // 0-100
   feedback: string;
+  source: 'groq' | 'gemini';
 }
 
 export interface SchedulingResponse {
@@ -182,4 +209,66 @@ export class AiServiceClient {
     );
     return data.text;
   }
+
+  /**
+   * Combines CV data + application answers into one structured analysis call.
+   * Replaces the old prompt-building + regex-parsing that lived in NestJS —
+   * FastAPI now owns the whole "call Groq, get clean JSON back" step.
+   */
+  async analyzeApplication(payload: {
+    candidateName: string;
+    school?: string;
+    academicLevel?: string;
+    preferredTheme?: string;
+    answers: string[];
+    cvSummary?: string;
+    cvSkills?: string[];
+    cvExperience?: any[];
+    cvProjects?: any[];   // ← add
+    cvEducation?: any[];
+  }): Promise<{ summary: string; theme: string; score: number; explanation: string }> {
+    const { data } = await firstValueFrom(
+      this.http.post(
+        '/analysis/application',
+        {
+          candidate_name: payload.candidateName,
+          school: payload.school,
+          academic_level: payload.academicLevel,
+          preferred_theme: payload.preferredTheme,
+          answers: payload.answers,
+          cv_summary: payload.cvSummary,
+          cv_skills: payload.cvSkills ?? [],
+          cv_experience: payload.cvExperience ?? [],
+          cv_projects: payload.cvProjects ?? [],   // ← add
+          cv_education: payload.cvEducation ?? [],
+        },
+        { headers: this.headers },
+      ),
+    );
+    return data;
+  }
+  // Inside the AiServiceClient class, alongside gradeAnswer/structureCv/etc.
+
+  async generateQuestions(
+    theme: string,
+    difficulty: string,
+    mcqCount: number,
+    openCount: number,
+  ): Promise<QuestionGenerationResponse> {
+    const { data } = await firstValueFrom(
+      this.http.post<QuestionGenerationResponse>(
+        '/questions/generate',
+        {
+          theme,
+          difficulty,
+          mcq_count: mcqCount,
+          open_count: openCount,
+        },
+        { headers: this.headers },
+      ),
+    );
+    return data;
+  }
+
+
 }

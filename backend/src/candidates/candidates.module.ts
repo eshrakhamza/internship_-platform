@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { CandidatesController } from './candidates.controller';
 import { CandidatesService } from './candidates.service';
-import { AiServiceModule } from '../ai/nestjs-integration/ai-service.module';
+import { AiServiceModule } from '../ai/ai-service.module';
 
 @Module({
   imports: [AiServiceModule],

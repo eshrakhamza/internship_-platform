@@ -15,6 +15,10 @@ import { UploadsModule } from './uploads/uploads.module';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { PostingsModule } from './postings/postings.module'; // Add this
+import { BullModule } from '@nestjs/bullmq';
+import { ConfigService } from '@nestjs/config';
+import { MatchingModule } from './matching/matching.module';
+
 @Module({
   imports: [
     ConfigModule,
@@ -28,7 +32,17 @@ import { PostingsModule } from './postings/postings.module'; // Add this
     AiModule,
     EmailModule,
     UploadsModule,
+    MatchingModule,
     PostingsModule, // Add this
+    BullModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        connection: {
+          host: config.get('REDIS_HOST', 'localhost'),
+          port: config.get('REDIS_PORT', 6379),
+        },
+      }),
+    }),
   ],
   controllers: [AppController],
   providers: [

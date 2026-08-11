@@ -2,12 +2,16 @@ import { Injectable, Logger, NotFoundException, BadRequestException } from '@nes
 import { PrismaService } from '../../prisma/prisma.service';
 import { SubmitAnswerDto } from './dto/submit-answer.dto';
 import { AttemptStatus, QuestionType } from '@prisma/client';
+import { AiServiceClient } from '../ai/ai-service.client'; // ← adapte ce path si besoin
 
 @Injectable()
 export class AttemptsService {
   private readonly logger = new Logger(AttemptsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly aiService: AiServiceClient,
+  ) {}
 
   async getCandidateByUserId(userId: string) {
     const candidate = await this.prisma.candidate.findUnique({
@@ -170,32 +174,90 @@ export class AttemptsService {
 
       if (question.type === QuestionType.MCQ) {
         mcqMax += 1;
+        let isCorrect = false;
+
         if (answer && answer.selectedOptionId) {
           const selectedOption = question.options.find(o => o.id === answer.selectedOptionId);
-          if (selectedOption && selectedOption.isCorrect) {
-            mcqTotal += 1;
-          }
+          isCorrect = selectedOption?.isCorrect ?? false;
+          if (isCorrect) mcqTotal += 1;
+        }
+
+        // Persiste le score MCQ sur AttemptAnswer
+        if (answer) {
+          await this.prisma.attemptAnswer.update({
+            where: { id: answer.id },
+            data: {
+              score: isCorrect ? 100 : 0,
+              feedback: isCorrect ? 'Correct' : 'Incorrect',
+              evaluatedAt: new Date(),
+            },
+          });
         }
       } else if (question.type === QuestionType.OPEN) {
-        openMax += 10;
-        if (answer && answer.openAnswer) {
-          // ============================================
-          // TODO: AI Open Question Evaluation (FastAPI)
-          // POST /api/ai/evaluate-open-question
-          // ============================================
-          const score = Math.min(10, Math.floor(answer.openAnswer.length / 20));
-          openTotal += Math.min(10, Math.max(0, score));
+        openMax += 100; // chaque question ouverte = 100 pts max
+
+        if (answer && answer.openAnswer?.trim()) {
+          try {
+            const grading = await this.aiService.gradeAnswer(
+              question.questionText,
+              question.expectedAnswer || question.explanation || 'General technical correctness',  // was: question.explanation || '...'
+              answer.openAnswer,
+            );
+
+            openTotal += grading.score;
+
+            await this.prisma.attemptAnswer.update({
+              where: { id: answer.id },
+              data: {
+                score: grading.score,
+                feedback: grading.feedback,
+                evaluatedAt: new Date(),
+              },
+            });
+
+            this.logger.log(
+              `Question ${question.id} graded: ${grading.score}/100 via ${grading.source}`,
+            );
+          } catch (error) {
+            this.logger.warn(
+              `AI grading failed for question ${question.id}: ${error.message}`,
+            );
+
+            await this.prisma.attemptAnswer.update({
+              where: { id: answer.id },
+              data: {
+                score: 0,
+                feedback: 'Could not grade automatically. Manual review required.',
+                evaluatedAt: new Date(),
+              },
+            });
+          }
+        } else if (answer) {
+          // Réponse vide / whitespace only
+          await this.prisma.attemptAnswer.update({
+            where: { id: answer.id },
+            data: {
+              score: 0,
+              feedback: 'No answer provided.',
+              evaluatedAt: new Date(),
+            },
+          });
         }
       }
     }
 
     const mcqScore = mcqMax > 0 ? Math.round((mcqTotal / mcqMax) * 100) : 0;
     const openScore = openMax > 0 ? Math.round((openTotal / openMax) * 100) : 0;
-    const totalScore = mcqMax > 0 && openMax > 0 
-      ? Math.round((mcqScore + openScore) / 2)
-      : mcqMax > 0 ? mcqScore : openScore;
+    const totalScore =
+      mcqMax > 0 && openMax > 0
+        ? Math.round((mcqScore + openScore) / 2)
+        : mcqMax > 0
+          ? mcqScore
+          : openScore;
 
-    const timeSpentSeconds = Math.floor((Date.now() - new Date(attempt.startedAt).getTime()) / 1000);
+    const timeSpentSeconds = Math.floor(
+      (Date.now() - new Date(attempt.startedAt).getTime()) / 1000,
+    );
 
     const completedAttempt = await this.prisma.attempt.update({
       where: { id: attemptId },
@@ -226,12 +288,9 @@ export class AttemptsService {
       },
     });
 
-    // ============================================
-    // TODO: AI Feedback Generation (FastAPI)
-    // POST /api/ai/generate-feedback
-    // ============================================
-
-    this.logger.log(`Attempt ${attemptId} completed with total score: ${totalScore}%`);
+    this.logger.log(
+      `Attempt ${attemptId} completed. MCQ: ${mcqScore}%, Open: ${openScore}%, Total: ${totalScore}%`,
+    );
     return completedAttempt;
   }
 
@@ -291,5 +350,14 @@ export class AttemptsService {
         };
       }),
     };
+  }
+  async getMyAttempts(userId: string) {
+    const candidate = await this.getCandidateByUserId(userId);
+
+    return this.prisma.attempt.findMany({
+      where: { candidateId: candidate.id, status: { in: ['COMPLETED', 'TIMED_OUT'] } },
+      include: { campaign: true },
+      orderBy: { completedAt: 'desc' },
+    });
   }
 }

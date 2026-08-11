@@ -17,6 +17,11 @@ export class CreateQuestionDto {
   @IsString()
   explanation?: string;
 
+  @ApiProperty({ required: false, description: 'Reference answer for AI grading (OPEN questions only)' })
+  @IsOptional()
+  @IsString()
+  expectedAnswer?: string;
+
   @ApiProperty({ required: false, description: 'MCQ options' })
   @IsOptional()
   @IsArray()

@@ -7,7 +7,7 @@ import { PublishAssessmentDto } from './dto/publish-assessment.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { UserRole } from '@prisma/client';
+import { Difficulty, Theme, UserRole } from '@prisma/client';
 
 @ApiTags('Assessments')
 @ApiBearerAuth()
@@ -15,6 +15,29 @@ import { UserRole } from '@prisma/client';
 export class AssessmentsController {
   constructor(private readonly assessmentsService: AssessmentsService) {}
 
+
+  @Get(':id/candidate-suggestions')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.RECRUITER, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Get AI-matched candidates for this assessment theme' })
+  async getCandidateSuggestions(@Param('id') id: string) {
+    return this.assessmentsService.getCandidateSuggestions(id);
+  }
+  
+  @Post('preview-questions')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.RECRUITER, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Generate AI question suggestions without saving' })
+  async previewQuestions(
+    @Body() body: { theme: Theme; difficulty: Difficulty; mcqCount?: number; openCount?: number },
+  ) {
+    return this.assessmentsService.previewQuestions(
+      body.theme,
+      body.difficulty,
+      body.mcqCount || 5,
+      body.openCount || 2,
+    );
+  } 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.RECRUITER, UserRole.ADMIN)

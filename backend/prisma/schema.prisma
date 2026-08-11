@@ -48,7 +48,6 @@ model Candidate {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
   
-  // Relationships
   user                User      @relation(fields: [userId], references: [id])
   application         Application?
   cvFile              File?     @relation(fields: [cvFileId], references: [id])
@@ -57,6 +56,7 @@ model Candidate {
   statusHistories     StatusHistory[] @relation("CandidateStatusHistories")
   aiAnalyses          AIAnalysis[]
   cvData              CandidateCV?
+  matchResults        MatchResult[]
 
   @@map("candidates")
 }
@@ -192,6 +192,7 @@ model CandidateCV {
   skills            String[]
   experience        Json?
   education         Json?
+  projects          Json?
   languages         String[]
   summary           String?
   embedding         Json?
@@ -221,13 +222,12 @@ model InternshipPosting {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   
-  // Relationships
   creator         User          @relation(fields: [createdBy], references: [id])
   applications    Application[]
+  matchRuns       MatchRun[]
 
   @@map("internship_postings")
 }
-
 enum PostingStatus {
   DRAFT
   PUBLISHED
@@ -273,11 +273,11 @@ model Question {
   type                    QuestionType @default(MCQ)
   questionText            String
   explanation             String?
+  expectedAnswer          String?   // NEW
   order                   Int
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
-  
-  // Relationships
+
   campaign                AssessmentCampaign @relation(fields: [campaignId], references: [id])
   options                 MCQOption[]
   attemptAnswers          AttemptAnswer[]
@@ -399,4 +399,35 @@ enum EmailType {
 enum EmailStatus {
   SENT
   FAILED
+}
+
+
+// schema.prisma
+model MatchRun {
+  id          String    @id @default(cuid())
+  jobId       String
+  status      String    @default("pending") // pending | processing | completed | failed
+  error       String?
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  job         InternshipPosting @relation(fields: [jobId], references: [id])
+  results     MatchResult[]
+
+  @@map("match_runs")
+}
+
+model MatchResult {
+  id              String   @id @default(cuid())
+  matchRunId      String
+  candidateId     String
+  similarityScore Float
+  explanation     String?
+  rank            Int
+
+  matchRun        MatchRun  @relation(fields: [matchRunId], references: [id])
+  candidate       Candidate @relation(fields: [candidateId], references: [id])
+
+  @@unique([matchRunId, candidateId])
+  @@map("match_results")
 }

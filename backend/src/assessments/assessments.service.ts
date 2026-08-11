@@ -5,35 +5,49 @@ import { CreateAssessmentDto, CreateQuestionDto } from './dto/create-assessment.
 import { UpdateAssessmentDto } from './dto/update-assessment.dto';
 import { PublishAssessmentDto } from './dto/publish-assessment.dto';
 import { Difficulty, Theme, CampaignStatus, QuestionType } from '@prisma/client';
-
+import { AiServiceClient } from '../ai/ai-service.client';
 @Injectable()
 export class AssessmentsService {
   private readonly logger = new Logger(AssessmentsService.name);
 
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly aiServiceClient: AiServiceClient,
   ) {}
 
   // Create a new assessment
   async create(userId: string, createDto: CreateAssessmentDto) {
     this.logger.log(`Creating assessment for user: ${userId}`);
-
+  
     let questions: CreateQuestionDto[] = createDto.questions || [];
-
+  
     if (!questions.length) {
-      // ============================================
-      // TODO: AI Question Generation (Future FastAPI Microservice)
-      // POST /api/ai/generate-questions
-      // ============================================
-      questions = this.getDefaultQuestions(
-        createDto.theme,
-        createDto.difficulty,
-        createDto.mcqCount || 5,
-        createDto.openCount || 2,
-      );
+      const mcqCount = createDto.mcqCount || 5;
+      const openCount = createDto.openCount || 2;
+  
+      try {
+        const result = await this.aiServiceClient.generateQuestions(
+          createDto.theme,
+          createDto.difficulty,
+          mcqCount,
+          openCount,
+        );
+        questions = result.questions;
+        this.logger.log(`Questions generated via ${result.source}`);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        this.logger.warn(`AI question generation failed (${msg}), falling back to templates`);
+        questions = this.getDefaultQuestions(
+          createDto.theme,
+          createDto.difficulty,
+          mcqCount,
+          openCount,
+        );
+      }
     }
-
+  
     const assessment = await this.prisma.assessmentCampaign.create({
       data: {
         title: createDto.title,
@@ -48,8 +62,9 @@ export class AssessmentsService {
             type: q.type === 'OPEN' ? QuestionType.OPEN : QuestionType.MCQ,
             questionText: q.questionText,
             explanation: q.explanation,
+            expectedAnswer: q.expectedAnswer,   // NEW
             order: index,
-            options: q.options ? {
+            options: q.options ?{
               create: q.options.map((opt, optIndex) => ({
                 optionText: opt.optionText,
                 isCorrect: opt.isCorrect,
@@ -67,11 +82,10 @@ export class AssessmentsService {
         },
       },
     });
-
+  
     this.logger.log(`Assessment created: ${assessment.id}`);
     return assessment;
   }
-
   private getDefaultQuestions(
     theme: Theme, 
     difficulty: Difficulty, 
@@ -113,12 +127,12 @@ export class AssessmentsService {
         type: 'OPEN',
         questionText: openTopics[i % openTopics.length],
         explanation: 'Look for specific examples, problem-solving approach, and technical depth.',
+        expectedAnswer: `A strong answer addresses ${theme} concepts with specific, concrete examples rather than generic statements.`,
       });
     }
 
     return questions;
   }
-
   async findAll(page: number = 1, limit: number = 10, status?: string) {
     const skip = (page - 1) * limit;
     const where: any = {};
@@ -427,5 +441,38 @@ async getAssessmentForTaking(assessmentId: string, userId: string) {
     attemptId: attempt.id,
     attemptStatus: attempt.status,
   };
+}
+async previewQuestions(theme: Theme, difficulty: Difficulty, mcqCount: number, openCount: number) {
+  try {
+    const result = await this.aiServiceClient.generateQuestions(theme, difficulty, mcqCount, openCount);
+    return { questions: result.questions, source: result.source };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    this.logger.warn(`AI preview generation failed (${msg}), returning templates`);
+    return {
+      questions: this.getDefaultQuestions(theme, difficulty, mcqCount, openCount),
+      source: 'fallback' as const,
+    };
+  }
+}
+async getCandidateSuggestions(id: string) {
+  const assessment = await this.findOne(id);
+
+  const analyses = await this.prisma.aIAnalysis.findMany({
+    where: { themeClassification: assessment.theme },
+    orderBy: { recommendationScore: 'desc' },
+    include: {
+      candidate: { include: { user: true } },
+    },
+  });
+
+  return analyses.map((a) => ({
+    candidateId: a.candidateId,
+    name: `${a.candidate.user.firstName} ${a.candidate.user.lastName}`,
+    email: a.candidate.user.email,
+    score: a.recommendationScore,
+    summary: a.candidateSummary,
+    explanation: a.recommendationExplanation,
+  }));
 }
 }

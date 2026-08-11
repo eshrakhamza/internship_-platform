@@ -5,23 +5,29 @@ import { CreateApplicationDto } from './dto/create-application.dto';
 import { UpdateApplicationStatusDto } from './dto/update-application-status.dto';
 import { ApplicationStatus, Theme } from '@prisma/client';
 import { EmailService } from '../email/email.service';
-
+import { AiServiceClient } from '../ai/ai-service.client'; // adjust path to match your project
+import * as fs from 'fs';
+import { Prisma } from '@prisma/client'; // add this import at the top
+import { AiService } from '../ai/ai.service'; // adjust path to match your project
 @Injectable()
 export class ApplicationsService {
   private readonly logger = new Logger(ApplicationsService.name);
+  cvProcessingQueue: any;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly aiServiceClient: AiServiceClient,
+    private readonly aiService: AiService, // ← add this
   ) {}
 
   async create(
-    userId: string, 
-    createDto: CreateApplicationDto, 
+    userId: string,
+    createDto: CreateApplicationDto,
     cvFile?: any
   ) {
     this.logger.log(`Creating application for user: ${userId}`);
-    
+  
     try {
       const user = await this.prisma.user.findUnique({
         where: { id: userId },
@@ -66,8 +72,8 @@ export class ApplicationsService {
           preferredTheme: createDto.preferredTheme,
         },
       });
-
-      // Save CV file if uploaded
+  
+      // Save CV file if uploaded, then extract + structure it
       let cvFileId: string | null = null;
       if (cvFile) {
         try {
@@ -81,12 +87,99 @@ export class ApplicationsService {
             },
           });
           cvFileId = fileRecord.id;
-          
-          // Update candidate with cvFileId
+  
           await this.prisma.candidate.update({
             where: { userId },
             data: { cvFileId: cvFileId },
           });
+  
+          // --- CV extraction + structuring, synchronous ---
+          try {
+            const pdfBuffer = cvFile.buffer ?? fs.readFileSync(cvFile.path);
+  
+            const extraction = await this.aiServiceClient.extractCv(
+              pdfBuffer,
+              cvFile.originalname || cvFile.filename,
+            );
+            this.logger.log(
+              `CV extracted via ${extraction.method}, ${extraction.text.length} chars`,
+            );
+  
+            const structured = await this.aiServiceClient.structureCv(extraction.text);
+            this.logger.log(`CV structured — skills: ${structured.skills?.length ?? 0}`);
+  
+            await this.prisma.candidateCV.upsert({
+              where: { candidateId: candidate.id },
+              create: {
+                candidateId: candidate.id,
+                fileId: cvFileId,
+                rawText: extraction.text,
+                extractionMethod: extraction.method,
+                fullName: structured.full_name,
+                email: structured.email,
+                phone: structured.phone,
+                skills: structured.skills ?? [],
+                experience: (structured.experience ?? []) as unknown as Prisma.InputJsonValue,
+                education: (structured.education ?? []) as unknown as Prisma.InputJsonValue,
+                projects: (structured.projects ?? []) as unknown as Prisma.InputJsonValue,
+                languages: structured.languages ?? [],
+                summary: structured.summary,
+              },
+              update: {
+                fileId: cvFileId,
+                rawText: extraction.text,
+                extractionMethod: extraction.method,
+                fullName: structured.full_name,
+                email: structured.email,
+                phone: structured.phone,
+                skills: structured.skills ?? [],
+                experience: (structured.experience ?? []) as unknown as Prisma.InputJsonValue,
+                education: (structured.education ?? []) as unknown as Prisma.InputJsonValue,
+                projects: (structured.projects ?? []) as unknown as Prisma.InputJsonValue,
+                languages: structured.languages ?? [],
+                summary: structured.summary,
+              },
+            });
+  
+            this.logger.log(`CandidateCV saved for candidate: ${candidate.id}`);
+  
+            // --- NEW: generate + persist embedding for matching, right after structuring ---
+            try {
+              const embeddingText =
+                structured.summary ??
+                [
+                  structured.skills?.join(', '),
+                  ...(structured.projects ?? []).map((p) => p?.description).filter(Boolean),
+                ]
+                  .filter(Boolean)
+                  .join('. ');
+  
+              if (embeddingText) {
+                const vector = await this.aiServiceClient.generateEmbedding(embeddingText);
+                await this.prisma.candidateCV.update({
+                  where: { candidateId: candidate.id },
+                  data: { embedding: vector },
+                });
+                this.logger.log(`Embedding generated and saved for candidate: ${candidate.id}`);
+              } else {
+                this.logger.warn(
+                  `No usable text to embed for candidate: ${candidate.id} — skipping embedding`,
+                );
+              }
+            } catch (embeddingError: any) {
+              // Don't fail the whole application if embedding generation fails —
+              // matching will simply skip this candidate until it succeeds later.
+              this.logger.error(
+                `Embedding generation failed for candidate ${candidate.id}: ${embeddingError.message}`,
+              );
+            }
+          } catch (cvProcessingError: any) {
+            // Don't fail the whole application if CV parsing fails — same
+            // graceful-degradation pattern as the email step below.
+            this.logger.error(
+              `CV extraction/structuring failed for candidate ${candidate.id}: ${cvProcessingError.message}`,
+            );
+          }
         } catch (fileError: any) {
           this.logger.error(`Failed to save CV file: ${fileError.message}`);
         }
@@ -114,6 +207,16 @@ export class ApplicationsService {
           changedBy: userId,
           notes: 'Application submitted',
         },
+      });
+  
+      // --- NEW: trigger AI scoring analysis in the background ---
+      // Fire-and-forget: don't make the candidate wait for Groq before their
+      // submission confirms. If this fails, analyzeAllPendingApplications
+      // (or a retry job) can pick it up later.
+      this.aiService.analyzeApplication(application.id).catch((err) => {
+        this.logger.error(
+          `Background AI analysis failed for application ${application.id}: ${err.message}`,
+        );
       });
   
       try {
@@ -426,6 +529,12 @@ async findMyApplication(userId: string) {
       } else if (newStatus === ApplicationStatus.REJECTED) {
         await this.emailService.sendRejectionEmail(user.email, fullName);
       } else if (newStatus === ApplicationStatus.TEST_INVITED) {
+        await this.emailService.sendTestInvitationEmail(
+          user.email,
+          fullName,
+          'Technical Assessment', // or fetch from the actual assessment campaign
+          new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now, or use actual deadline
+      );
         this.logger.log(`Test invitation should be sent to ${user.email}`);
       }
     } catch (error: any) {
@@ -832,6 +941,7 @@ async getRecruiterStats() {
 }
 
 // Get paginated applications for recruiter with filters
+// Get paginated applications for recruiter with filters
 async getRecruiterApplications(
   page: number = 1,
   limit: number = 10,
@@ -867,25 +977,29 @@ async getRecruiterApplications(
     };
   }
 
+  // When sorting by aiScore, we can't paginate at the DB level (the sort
+  // happens in-memory after fetching), so we fetch all matching rows and
+  // paginate manually below. For other sort fields, DB-level skip/take is fine.
+  const isAiScoreSort = filters?.sortBy === 'aiScore';
+
   const orderBy: any = {};
-  if (filters?.sortBy) {
-    if (filters.sortBy === 'submittedAt') {
+  if (!isAiScoreSort) {
+    if (filters?.sortBy === 'submittedAt') {
       orderBy.submittedAt = filters.sortOrder || 'desc';
-    } else if (filters.sortBy === 'status') {
+    } else if (filters?.sortBy === 'status') {
       orderBy.status = filters.sortOrder || 'asc';
-    } else if (filters.sortBy === 'name') {
+    } else if (filters?.sortBy === 'name') {
       orderBy.candidate = { user: { firstName: filters.sortOrder || 'asc' } };
+    } else {
+      orderBy.submittedAt = 'desc';
     }
-  } else {
-    orderBy.submittedAt = 'desc';
   }
 
   const [applications, total] = await Promise.all([
     this.prisma.application.findMany({
       where,
-      skip,
-      take: limit,
-      orderBy,
+      ...(isAiScoreSort ? {} : { skip, take: limit }),
+      orderBy: isAiScoreSort ? { submittedAt: 'desc' } : orderBy,
       include: {
         candidate: {
           include: {
@@ -913,43 +1027,45 @@ async getRecruiterApplications(
           },
           take: 1,
         },
-        // AI features commented out for FastAPI migration
-        // aiAnalysis: true,
+        aiAnalyses: true,
       },
     }),
     this.prisma.application.count({ where }),
   ]);
 
-  // ============================================
-  // TODO: AI Match Score (Future FastAPI Microservice)
-  // ============================================
-  // GET /api/ai/match-scores?applicationIds=...
-  // Returns: { applicationId, score, reasoning }[]
-  // ============================================
+  let mapped = applications.map(app => ({
+    id: app.id,
+    status: app.status,
+    submittedAt: app.submittedAt,
+    candidate: {
+      id: app.candidate.id,
+      name: `${app.candidate.user.firstName} ${app.candidate.user.lastName}`,
+      email: app.candidate.user.email,
+      phoneNumber: app.candidate.user.phoneNumber,
+      preferredTheme: app.candidate.preferredTheme,
+    },
+    cvFile: app.candidate.cvFile,
+    latestStatusHistory: app.statusHistories[0] || null,
+    aiScore: app.aiAnalyses[0]?.recommendationScore ?? null,
+  }));
+
+  if (isAiScoreSort) {
+    mapped = mapped.sort((a, b) => {
+      const diff = (a.aiScore ?? -1) - (b.aiScore ?? -1);
+      return filters?.sortOrder === 'asc' ? diff : -diff;
+    });
+    // Manual pagination since we sorted in-memory
+    mapped = mapped.slice(skip, skip + limit);
+  }
 
   return {
-    data: applications.map(app => ({
-      id: app.id,
-      status: app.status,
-      submittedAt: app.submittedAt,
-      candidate: {
-        id: app.candidate.id,
-        name: `${app.candidate.user.firstName} ${app.candidate.user.lastName}`,
-        email: app.candidate.user.email,
-        phoneNumber: app.candidate.user.phoneNumber,
-      },
-      cvFile: app.candidate.cvFile,
-      latestStatusHistory: app.statusHistories[0] || null,
-      // AI score will be added later
-      aiScore: null,
-    })),
+    data: mapped,
     total,
     page,
     limit,
     totalPages: Math.ceil(total / limit),
   };
 }
-
 // Get single application with full details for recruiter
 async getRecruiterApplication(applicationId: string) {
   const application = await this.prisma.application.findUnique({
@@ -999,8 +1115,7 @@ async getRecruiterApplication(applicationId: string) {
           },
         },
       },
-      // AI features commented out for FastAPI migration
-      // aiAnalysis: true,
+      aiAnalyses: true, // ← confirm exact relation name from your schema
     },
   });
 
@@ -1008,20 +1123,18 @@ async getRecruiterApplication(applicationId: string) {
     throw new NotFoundException('Application not found');
   }
 
-  // ============================================
-  // TODO: AI Analysis (Future FastAPI Microservice)
-  // ============================================
-  // GET /api/ai/analysis/{applicationId}
-  // Returns: { summary, strengths, weaknesses, recommendations, matchScore }
-  // ============================================
-
   return {
     ...application,
-    // AI analysis will be added later
-    aiAnalysis: null,
+    aiAnalysis: application.aiAnalyses[0]
+      ? {
+          candidateSummary: application.aiAnalyses[0].candidateSummary,
+          themeClassification: application.aiAnalyses[0].themeClassification,
+          recommendationScore: application.aiAnalyses[0].recommendationScore,
+          recommendationExplanation: application.aiAnalyses[0].recommendationExplanation,
+        }
+      : null,
   };
 }
-
 // Add note to application
 async addRecruiterNote(
   applicationId: string,
@@ -1055,5 +1168,86 @@ async addRecruiterNote(
       },
     },
   });
+}
+
+async reprocessCv(candidateId: string): Promise<void> {
+  const candidate = await this.prisma.candidate.findUnique({
+    where: { id: candidateId },
+    include: { cvFile: true },
+  });
+
+  if (!candidate) {
+    throw new NotFoundException('Candidate not found');
+  }
+
+  if (!candidate.cvFile) {
+    throw new HttpException('No CV file on record for this candidate', HttpStatus.BAD_REQUEST);
+  }
+
+  const pdfBuffer = fs.readFileSync(candidate.cvFile.path);
+
+  const extraction = await this.aiServiceClient.extractCv(
+    pdfBuffer,
+    candidate.cvFile.originalName,
+  );
+  this.logger.log(`[reprocess] CV extracted via ${extraction.method}, ${extraction.text.length} chars`);
+
+  const structured = await this.aiServiceClient.structureCv(extraction.text);
+  this.logger.log(`[reprocess] CV structured — skills: ${structured.skills?.length ?? 0}`);
+
+  await this.prisma.candidateCV.upsert({
+    where: { candidateId: candidate.id },
+    create: {
+      candidateId: candidate.id,
+      fileId: candidate.cvFile.id,
+      rawText: extraction.text,
+      extractionMethod: extraction.method,
+      fullName: structured.full_name,
+      email: structured.email,
+      phone: structured.phone,
+      skills: structured.skills ?? [],
+      experience: (structured.experience ?? []) as unknown as Prisma.InputJsonValue,
+      education: (structured.education ?? []) as unknown as Prisma.InputJsonValue,
+      projects: (structured.projects ?? []) as unknown as Prisma.InputJsonValue,
+      languages: structured.languages ?? [],
+      summary: structured.summary,
+    },
+    update: {
+      fileId: candidate.cvFile.id,
+      rawText: extraction.text,
+      extractionMethod: extraction.method,
+      fullName: structured.full_name,
+      email: structured.email,
+      phone: structured.phone,
+      skills: structured.skills ?? [],
+      experience: (structured.experience ?? []) as unknown as Prisma.InputJsonValue,
+      education: (structured.education ?? []) as unknown as Prisma.InputJsonValue,
+      projects: (structured.projects ?? []) as unknown as Prisma.InputJsonValue,
+      languages: structured.languages ?? [],
+      summary: structured.summary,
+    },
+  });
+
+  this.logger.log(`[reprocess] CandidateCV saved for candidate: ${candidate.id}`);
+
+  const embeddingText = [
+    structured.summary,
+    structured.skills?.length ? `Skills: ${structured.skills.join(', ')}` : null,
+    ...(structured.experience ?? []).map((e) => `${e.title} at ${e.company}: ${e.description ?? ''}`),
+    ...(structured.projects ?? []).map((p) => `${p.name}: ${p.description ?? ''}`),
+  ]
+    .filter(Boolean)
+    .join('. ');
+
+  if (embeddingText) {
+    const vector = await this.aiServiceClient.generateEmbedding(embeddingText);
+    await this.prisma.candidateCV.update({
+      where: { candidateId: candidate.id },
+      data: { embedding: vector },
+    });
+    this.logger.log(`[reprocess] Embedding generated and saved for candidate: ${candidate.id}`);
+  } else {
+    this.logger.warn(`[reprocess] No usable text to embed for candidate: ${candidate.id}`);
+  }
 }
 }

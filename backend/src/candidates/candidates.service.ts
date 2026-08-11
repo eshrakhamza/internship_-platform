@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { readFile } from 'fs/promises';
-import { AiServiceClient } from './../ai/nestjs-integration/ai-service.client';
+import { AiServiceClient } from './../ai/ai-service.client';
 import { PrismaService } from 'prisma/prisma.service';
 
 

@@ -7,7 +7,7 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
-import { Mail, Lock, ArrowRight, CheckCircle, Sparkles, Loader2 } from 'lucide-react';
+import { Mail, Lock, ArrowRight, CheckCircle, Building2, Loader2, Briefcase, Users, Globe } from 'lucide-react';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -16,6 +16,11 @@ export default function LoginPage() {
   const [step, setStep] = useState<'email' | 'otp'>('email');
   const { sendOTP, login, user, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
+
+  // Brand colors - SW Consulting
+  const brandBlue = '#1e3a5f';
+  const brandBlueLight = '#2c5282';
+  const brandAccent = '#c9a227'; // Gold accent for consulting premium feel
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -68,30 +73,34 @@ export default function LoginPage() {
   // Show loading state
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 className="w-8 h-8 animate-spin" style={{ color: brandBlue }} />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex bg-gradient-to-br from-slate-50 via-white to-blue-50">
+    <div className="min-h-screen flex bg-slate-50">
       {/* Left Side - Form */}
       <div className="flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8 py-12">
         <div className="max-w-md w-full space-y-8">
           <div>
             <div className="flex justify-center">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/25">
-                <Sparkles className="w-6 h-6 text-white" />
+              {/* SW Consulting Logo Mark */}
+              <div 
+                className="w-16 h-16 rounded-xl flex items-center justify-center shadow-lg"
+                style={{ backgroundColor: brandBlue }}
+              >
+                <span className="text-white font-bold text-2xl tracking-tight">SW</span>
               </div>
             </div>
-            <h2 className="mt-6 text-center text-3xl font-bold text-gray-900">
-              Welcome Back
+            <h2 className="mt-6 text-center text-3xl font-bold text-slate-900">
+              Welcome to SW Consulting
             </h2>
-            <p className="mt-2 text-center text-sm text-gray-600">
+            <p className="mt-2 text-center text-sm text-slate-500">
               {step === 'email' 
-                ? 'Enter your email to sign in' 
-                : 'Enter the OTP sent to your email'}
+                ? 'Enter your email to access your account' 
+                : 'Enter the verification code sent to your email'}
             </p>
           </div>
 
@@ -99,19 +108,19 @@ export default function LoginPage() {
             <form onSubmit={handleSendOTP} className="mt-8 space-y-6">
               <div className="space-y-4">
                 <div>
-                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1">
                     Email Address
                   </label>
                   <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                     <Input
                       id="email"
                       type="email"
                       required
-                      placeholder="you@example.com"
+                      placeholder="you@sw-consulting.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      className="pl-10 h-12 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                      className="pl-10 h-12 border-slate-200 focus:border-slate-400 focus:ring-slate-400 bg-white"
                     />
                   </div>
                 </div>
@@ -119,7 +128,16 @@ export default function LoginPage() {
 
               <Button 
                 type="submit" 
-                className="w-full h-12 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg shadow-blue-500/25"
+                className="w-full h-12 text-white shadow-md hover:shadow-lg transition-all duration-200"
+                style={{ 
+                  backgroundColor: brandBlue,
+                }}
+                onMouseEnter={(e) => {
+                  (e.target as HTMLElement).style.backgroundColor = brandBlueLight;
+                }}
+                onMouseLeave={(e) => {
+                  (e.target as HTMLElement).style.backgroundColor = brandBlue;
+                }}
                 disabled={loading}
               >
                 {loading ? (
@@ -136,8 +154,8 @@ export default function LoginPage() {
               </Button>
 
               <div className="text-center">
-                <p className="text-xs text-gray-500">
-                  By continuing, you agree to our Terms of Service and Privacy Policy
+                <p className="text-xs text-slate-400">
+                  Secure access portal for SW Consulting candidates and recruiters
                 </p>
               </div>
             </form>
@@ -145,39 +163,52 @@ export default function LoginPage() {
             <form onSubmit={handleVerifyOTP} className="mt-8 space-y-6">
               <div className="space-y-4">
                 <div>
-                  <label htmlFor="otp" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="otp" className="block text-sm font-medium text-slate-700 mb-1">
                     Verification Code
                   </label>
                   <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                     <Input
                       id="otp"
                       type="text"
                       required
-                      placeholder="Enter 6-digit OTP"
+                      placeholder="000000"
                       value={otp}
                       onChange={(e) => setOtp(e.target.value)}
                       maxLength={6}
-                      className="pl-10 h-12 text-center text-2xl tracking-widest font-mono border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                      className="pl-10 h-12 text-center text-2xl tracking-widest font-mono border-slate-200 focus:border-slate-400 focus:ring-slate-400 bg-white"
                     />
                   </div>
-                  <p className="mt-2 text-sm text-gray-500 text-center">
-                    OTP sent to <span className="font-medium text-gray-700">{email}</span>
+                  <p className="mt-2 text-sm text-slate-500 text-center">
+                    Code sent to <span className="font-medium text-slate-700">{email}</span>
                   </p>
                 </div>
 
-                <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 flex items-start space-x-3">
-                  <CheckCircle className="w-5 h-5 text-blue-500 mt-0.5" />
-                  <div className="text-sm text-blue-700">
-                    <p>Check your email for the 6-digit verification code</p>
-                    <p className="text-blue-500 text-xs mt-1">The code expires in 10 minutes</p>
+                <div 
+                  className="border rounded-lg p-4 flex items-start space-x-3"
+                  style={{ 
+                    backgroundColor: '#f1f5f9',
+                    borderColor: '#e2e8f0'
+                  }}
+                >
+                  <CheckCircle className="w-5 h-5 mt-0.5" style={{ color: brandBlue }} />
+                  <div className="text-sm text-slate-700">
+                    <p>Check your inbox for the 6-digit verification code</p>
+                    <p className="text-slate-400 text-xs mt-1">The code expires in 10 minutes</p>
                   </div>
                 </div>
               </div>
 
               <Button 
                 type="submit" 
-                className="w-full h-12 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg shadow-blue-500/25"
+                className="w-full h-12 text-white shadow-md hover:shadow-lg transition-all duration-200"
+                style={{ backgroundColor: brandBlue }}
+                onMouseEnter={(e) => {
+                  (e.target as HTMLElement).style.backgroundColor = brandBlueLight;
+                }}
+                onMouseLeave={(e) => {
+                  (e.target as HTMLElement).style.backgroundColor = brandBlue;
+                }}
                 disabled={loading}
               >
                 {loading ? (
@@ -196,7 +227,7 @@ export default function LoginPage() {
               <Button
                 type="button"
                 variant="ghost"
-                className="w-full text-sm text-gray-500 hover:text-gray-700"
+                className="w-full text-sm text-slate-500 hover:text-slate-700 hover:bg-slate-100"
                 onClick={() => setStep('email')}
               >
                 ← Change email address
@@ -206,30 +237,58 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* Right Side - Image/Info */}
-      <div className="hidden lg:flex flex-1 bg-gradient-to-br from-blue-600 to-purple-600 p-12 items-center justify-center">
+      {/* Right Side - Brand Panel */}
+      <div 
+        className="hidden lg:flex flex-1 p-12 items-center justify-center"
+        style={{ backgroundColor: brandBlue }}
+      >
         <div className="max-w-md text-center text-white">
-          <div className="bg-white/10 backdrop-blur-lg rounded-2xl p-8">
-            <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
-              <Sparkles className="w-8 h-8 text-white" />
+          <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 border border-white/10">
+            {/* Large Logo */}
+            <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-xl">
+              <span 
+                className="font-bold text-3xl tracking-tight"
+                style={{ color: brandBlue }}
+              >
+                SW
+              </span>
             </div>
-            <h3 className="text-2xl font-bold mb-4">AI-Powered Recruitment</h3>
-            <p className="text-blue-100 mb-6">
-              Join thousands of candidates finding their dream internships through our intelligent matching platform
+            
+            <h3 className="text-2xl font-bold mb-2">SW Consulting</h3>
+            <div 
+              className="w-12 h-0.5 mx-auto mb-4"
+              style={{ backgroundColor: brandAccent }}
+            />
+            <p className="text-slate-300 mb-8 text-sm leading-relaxed">
+              Connecting exceptional talent with world-class opportunities. 
+              Your career journey starts here.
             </p>
+            
             <div className="space-y-4 text-left">
               <div className="flex items-center space-x-3">
-                <CheckCircle className="w-5 h-5 text-blue-200" />
-                <span className="text-sm text-blue-50">AI-powered candidate evaluation</span>
+                <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
+                  <Briefcase className="w-4 h-4 text-white" />
+                </div>
+                <span className="text-sm text-slate-200">Premium job opportunities</span>
               </div>
               <div className="flex items-center space-x-3">
-                <CheckCircle className="w-5 h-5 text-blue-200" />
-                <span className="text-sm text-blue-50">Automated technical assessments</span>
+                <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
+                  <Users className="w-4 h-4 text-white" />
+                </div>
+                <span className="text-sm text-slate-200">Personalized career coaching</span>
               </div>
               <div className="flex items-center space-x-3">
-                <CheckCircle className="w-5 h-5 text-blue-200" />
-                <span className="text-sm text-blue-50">Real-time application tracking</span>
+                <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center">
+                  <Globe className="w-4 h-4 text-white" />
+                </div>
+                <span className="text-sm text-slate-200">Global consulting network</span>
               </div>
+            </div>
+
+            <div className="mt-8 pt-6 border-t border-white/10">
+              <p className="text-xs text-slate-400">
+                © 2026 SW Consulting. All rights reserved.
+              </p>
             </div>
           </div>
         </div>

@@ -20,16 +20,6 @@ class Education(BaseModel):
     year: str | None = None
 
 
-class StructuredCV(BaseModel):
-    full_name: str | None = None
-    email: str | None = None
-    phone: str | None = None
-    skills: list[str] = []
-    experience: list[Experience] = []
-    education: list[Education] = []
-    languages: list[str] = []
-    summary: str | None = None
-
 
 class StructuringRequest(BaseModel):
     text: str
@@ -64,3 +54,22 @@ class LinkedInPostRequest(BaseModel):
 
 class LinkedInPostResponse(BaseModel):
     post: str
+
+
+class Project(BaseModel):
+    name: str
+    period: str | None = None
+    description: str | None = None
+    technologies: list[str] = []
+
+
+class StructuredCV(BaseModel):
+    full_name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    skills: list[str] = []
+    experience: list[Experience] = []
+    projects: list[Project] = []
+    education: list[Education] = []
+    languages: list[str] = []
+    summary: str | None = None

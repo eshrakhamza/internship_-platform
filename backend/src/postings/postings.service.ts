@@ -3,12 +3,32 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CreatePostingDto } from './dto/create-posting.dto';
 import { UpdatePostingDto } from './dto/update-posting.dto';
 import { PostingStatus } from '@prisma/client';
+import { GeneratePostingDto } from './dto/generate-posting.dto';
+import { HttpService } from '@nestjs/axios';
+import { firstValueFrom } from 'rxjs';
+
+
+interface AIPostingResponse {
+  title: string;
+  description: string;
+  required_skills: string[];
+  preferred_skills: string[];
+  model_used: string;
+} 
+
 
 @Injectable()
 export class PostingsService {
   private readonly logger = new Logger(PostingsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly httpService: HttpService,  // <-- injected properly
+  ) {}   
+
+
 
   async create(userId: string, dto: CreatePostingDto) {
     this.logger.log(`Creating internship posting by user: ${userId}`);
@@ -102,28 +122,16 @@ export class PostingsService {
               email: true,
             },
           },
-          applications: {
-            include: {
-              candidate: {
-                include: {
-                  user: {
-                    select: {
-                      firstName: true,
-                      lastName: true,
-                      email: true,
-                    },
-                  },
-                },
-              },
-            },
-          },
+          // applications include removed — under Model A, candidates apply to
+          // the general pool (preferredTheme), not to a specific posting.
+          // Use the matching route instead to see ranked candidates for this posting.
         },
       });
-
+  
       if (!posting) {
         throw new NotFoundException('Internship posting not found');
       }
-
+  
       return posting;
     } catch (error) {
       this.logger.error(`Error fetching posting ${id}: ${error.message}`);
@@ -199,5 +207,34 @@ export class PostingsService {
     return this.prisma.internshipPosting.delete({
       where: { id },
     });
+  }
+
+  async generateDraft(dto: GeneratePostingDto) {
+    const response = await firstValueFrom(
+      this.httpService.post<AIPostingResponse>(
+        `${process.env.AI_SERVICE_URL}/postings/generate`,
+        {
+          title: dto.title,
+          rough_input: dto.roughInput,
+          seniority: dto.seniority,
+          department: dto.department,
+        },
+        {
+          headers: {
+            'x-internal-api-key': process.env.INTERNAL_API_KEY,
+          },
+        },
+      ),
+    );
+
+    const data = response.data;
+
+    return {
+      title: data.title,
+      description: data.description,
+      requiredSkills: data.required_skills,
+      preferredSkills: data.preferred_skills,
+      modelUsed: data.model_used,
+    };
   }
 }

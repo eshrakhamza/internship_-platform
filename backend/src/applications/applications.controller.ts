@@ -16,6 +16,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { ApplicationsService } from './applications.service';
+import { AiService } from '../ai/ai.service'; // ← add this, adjust path if needed
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { UpdateApplicationStatusDto } from './dto/update-application-status.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -31,6 +32,7 @@ import { extname } from 'path';
 export class ApplicationsController {
   constructor(
     private readonly applicationsService: ApplicationsService,
+    private readonly aiService: AiService, // ← add this
   ) {}
 
   @Post()
@@ -175,87 +177,94 @@ export class ApplicationsController {
   }
 
   // ============================================
-  // TODO: AI Endpoints - Will be moved to FastAPI Microservice
+  // AI Endpoints — manual trigger/retry, in addition to the automatic
+  // background trigger that now fires on application submission.
+  // Useful for: retrying a failed analysis, or backfilling analysis/embeddings
+  // for applications created before automatic triggering existed.
   // ============================================
-  /*
   @Post(':id/analyze')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.RECRUITER, UserRole.ADMIN)
-  @ApiOperation({ summary: 'Analyze application with AI' })
+  @ApiOperation({ summary: 'Manually trigger (or retry) AI analysis for an application' })
   @ApiResponse({ status: 200, description: 'AI analysis completed' })
   async analyzeApplication(@Param('id') id: string) {
-    // This will be handled by FastAPI
     return this.aiService.analyzeApplication(id);
   }
 
   @Post('analyze-all')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.RECRUITER, UserRole.ADMIN)
-  @ApiOperation({ summary: 'Analyze all pending applications with AI' })
-  @ApiResponse({ status: 200, description: 'All applications analyzed' })
+  @ApiOperation({ summary: 'Analyze all applications missing AI analysis' })
+  @ApiResponse({ status: 200, description: 'All pending applications analyzed' })
   async analyzeAllApplications() {
-    // This will be handled by FastAPI
     return this.aiService.analyzeAllPendingApplications();
   }
-  */
- // Add to ApplicationsController class
 
-@Get('recruiter/stats')
+  @Get('recruiter/stats')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.RECRUITER, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Get recruiter dashboard stats' })
+  @ApiResponse({ status: 200, description: 'Recruiter stats' })
+  async getRecruiterStats() {
+    return this.applicationsService.getRecruiterStats();
+  }
+
+  @Get('recruiter/applications')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.RECRUITER, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Get paginated applications for recruiter' })
+  @ApiResponse({ status: 200, description: 'List of applications' })
+  async getRecruiterApplications(
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 10,
+    @Query('status') status?: string,
+    @Query('theme') theme?: string,
+    @Query('search') search?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder?: 'asc' | 'desc',
+  ) {
+    return this.applicationsService.getRecruiterApplications(page, limit, {
+      status,
+      theme,
+      search,
+      sortBy,
+      sortOrder,
+    });
+  }
+
+  @Get('recruiter/application/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.RECRUITER, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Get application details for recruiter' })
+  @ApiResponse({ status: 200, description: 'Application details' })
+  async getRecruiterApplication(@Param('id') id: string) {
+    return this.applicationsService.getRecruiterApplication(id);
+  }
+
+  @Post('recruiter/application/:id/note')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.RECRUITER, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Add note to application' })
+  @ApiResponse({ status: 201, description: 'Note added successfully' })
+  async addRecruiterNote(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() body: { content: string; category?: string },
+  ) {
+    return this.applicationsService.addRecruiterNote(
+      id,
+      req.user.id,
+      body.content,
+      body.category,
+    );
+  }
+
+  @Post('candidate/:candidateId/reprocess-cv')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.RECRUITER, UserRole.ADMIN)
-@ApiOperation({ summary: 'Get recruiter dashboard stats' })
-@ApiResponse({ status: 200, description: 'Recruiter stats' })
-async getRecruiterStats() {
-  return this.applicationsService.getRecruiterStats();
-}
-
-@Get('recruiter/applications')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.RECRUITER, UserRole.ADMIN)
-@ApiOperation({ summary: 'Get paginated applications for recruiter' })
-@ApiResponse({ status: 200, description: 'List of applications' })
-async getRecruiterApplications(
-  @Query('page') page: number = 1,
-  @Query('limit') limit: number = 10,
-  @Query('status') status?: string,
-  @Query('theme') theme?: string,
-  @Query('search') search?: string,
-  @Query('sortBy') sortBy?: string,
-  @Query('sortOrder') sortOrder?: 'asc' | 'desc',
-) {
-  return this.applicationsService.getRecruiterApplications(page, limit, {
-    status,
-    theme,
-    search,
-    sortBy,
-    sortOrder,
-  });
-}
-
-@Get('recruiter/application/:id')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.RECRUITER, UserRole.ADMIN)
-@ApiOperation({ summary: 'Get application details for recruiter' })
-@ApiResponse({ status: 200, description: 'Application details' })
-async getRecruiterApplication(@Param('id') id: string) {
-  return this.applicationsService.getRecruiterApplication(id);
-}
-
-@Post('recruiter/application/:id/note')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(UserRole.RECRUITER, UserRole.ADMIN)
-@ApiOperation({ summary: 'Add note to application' })
-@ApiResponse({ status: 201, description: 'Note added successfully' })
-async addRecruiterNote(
-  @Req() req: any,
-  @Param('id') id: string,
-  @Body() body: { content: string; category?: string },
-) {
-  return this.applicationsService.addRecruiterNote(
-    id,
-    req.user.id,
-    body.content,
-    body.category,
-  );
+@ApiOperation({ summary: 'Re-run CV extraction, structuring, and embedding for a candidate' })
+async reprocessCv(@Param('candidateId') candidateId: string) {
+  await this.applicationsService.reprocessCv(candidateId);
+  return { status: 'reprocessed' };
 }
 }

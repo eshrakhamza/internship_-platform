@@ -7,6 +7,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '@prisma/client';
+import { GeneratePostingDto } from './dto/generate-posting.dto';
 
 @ApiTags('Postings')
 @ApiBearerAuth()
@@ -35,7 +36,10 @@ export class PostingsController {
   ) {
     return this.postingsService.findAll(page, limit, { status, theme, search });
   }
-
+  @Post('generate-draft')
+  async generateDraft(@Body() dto: GeneratePostingDto) {
+    return this.postingsService.generateDraft(dto);
+  }
   @Get(':id')
   @ApiOperation({ summary: 'Get posting by ID' })
   @ApiResponse({ status: 200, description: 'Posting details' })

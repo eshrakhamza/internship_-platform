@@ -19,7 +19,12 @@ export class AttemptsController {
     const candidate = await this.attemptsService.getCandidateByUserId(req.user.id);
     return this.attemptsService.create(candidate.id, createDto.campaignId);
   }
-
+  @Get('my/history')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: "Get candidate's completed assessment attempts" })
+  async getMyAttempts(@Req() req: any) {
+    return this.attemptsService.getMyAttempts(req.user.id);
+  }
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Get attempt by ID' })

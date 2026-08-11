@@ -64,22 +64,27 @@ export default function TakeAssessmentPage() {
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
       const token = localStorage.getItem('accessToken');
-      
-    // In fetchAssessment, use the new endpoint
-const response = await fetch(`${API_URL}/api/assessments/candidate/${assessmentId}/take`, {
-  headers: {
-    'Authorization': `Bearer ${token}`,
-  },
-});
+
+      const response = await fetch(`${API_URL}/api/assessments/candidate/${assessmentId}/take`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (response.status === 401) {
+        toast.error('Session expired — please log in again');
+        router.push('/login');
+        return;
+      }
 
       if (response.ok) {
         const data = await response.json();
         setAssessment(data);
-        
+
         if (data.attempts && data.attempts.length > 0) {
           const existingAttempt = data.attempts[0];
           setAttemptId(existingAttempt.id);
-          
+
           if (existingAttempt.status === 'IN_PROGRESS') {
             setHasStarted(true);
             await loadAttemptAnswers(existingAttempt.id);
@@ -87,18 +92,19 @@ const response = await fetch(`${API_URL}/api/assessments/candidate/${assessmentI
             toast.success('You have already completed this assessment', {
               icon: 'ℹ️',
             });
-            
+
             router.push(`/assessment/results/${existingAttempt.id}`);
             return;
           }
         }
-        
+
         setTimeRemaining(data.durationMinutes * 60);
       } else if (response.status === 404) {
         toast.error('Assessment not found');
         router.push('/dashboard');
       } else {
-        throw new Error('Failed to load assessment');
+        const body = await response.text();
+        throw new Error(`Failed to load assessment (${response.status}): ${body}`);
       }
     } catch (error) {
       console.error('Error fetching assessment:', error);
@@ -112,7 +118,7 @@ const response = await fetch(`${API_URL}/api/assessments/candidate/${assessmentI
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
       const token = localStorage.getItem('accessToken');
-      
+
       const response = await fetch(`${API_URL}/api/attempts/${attemptId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -152,7 +158,7 @@ const response = await fetch(`${API_URL}/api/assessments/candidate/${assessmentI
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
       const token = localStorage.getItem('accessToken');
-      
+
       const response = await fetch(`${API_URL}/api/attempts`, {
         method: 'POST',
         headers: {
@@ -190,11 +196,11 @@ const response = await fetch(`${API_URL}/api/assessments/candidate/${assessmentI
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
       const token = localStorage.getItem('accessToken');
-      
+
       const payload: any = {
         questionId,
       };
-      
+
       if (typeof value === 'string' && value.length > 100) {
         payload.openAnswer = value;
       } else {
@@ -216,12 +222,12 @@ const response = await fetch(`${API_URL}/api/assessments/candidate/${assessmentI
 
   const handleSubmit = async () => {
     if (!attemptId) return;
-    
+
     setIsSubmitting(true);
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
       const token = localStorage.getItem('accessToken');
-      
+
       const response = await fetch(`${API_URL}/api/attempts/${attemptId}/complete`, {
         method: 'POST',
         headers: {
@@ -288,7 +294,7 @@ const response = await fetch(`${API_URL}/api/assessments/candidate/${assessmentI
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8 text-center">
             <h1 className="text-2xl font-bold text-gray-900 mb-4">{assessment.title}</h1>
             <p className="text-gray-600 mb-6">{assessment.description || 'No description provided.'}</p>
-            
+
             <div className="bg-gray-50 rounded-lg p-6 mb-6 text-left">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -323,7 +329,7 @@ const response = await fetch(`${API_URL}/api/assessments/candidate/${assessmentI
               </ul>
             </div>
 
-            <Button 
+            <Button
               onClick={startAssessment}
               className="px-8 bg-green-600 hover:bg-green-700"
             >
@@ -381,8 +387,8 @@ const response = await fetch(`${API_URL}/api/assessments/candidate/${assessmentI
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <div className="mb-6">
             <span className={`inline-block px-3 py-1 text-sm font-medium rounded-full ${
-              currentQuestion.type === 'MCQ' 
-                ? 'bg-blue-100 text-blue-700' 
+              currentQuestion.type === 'MCQ'
+                ? 'bg-blue-100 text-blue-700'
                 : 'bg-purple-100 text-purple-700'
             }`}>
               {currentQuestion.type === 'MCQ' ? 'Multiple Choice' : 'Open Question'}
@@ -465,7 +471,7 @@ const response = await fetch(`${API_URL}/api/assessments/candidate/${assessmentI
           </div>
         </div>
 
-        {answeredCount < assessment.questions.length && 
+        {answeredCount < assessment.questions.length &&
          currentQuestionIndex === assessment.questions.length - 1 && (
           <div className="mt-4 p-4 bg-yellow-50 rounded-lg border border-yellow-200 flex items-start space-x-3">
             <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />

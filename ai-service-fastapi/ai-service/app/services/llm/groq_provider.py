@@ -24,7 +24,7 @@ class GroqProvider(LLMProvider):
             model=self._model,
             messages=messages,
             response_format={"type": "json_object"} if json_mode else None,
-            temperature=0.3,
+            temperature=0,
         )
         return response.choices[0].message.content
 

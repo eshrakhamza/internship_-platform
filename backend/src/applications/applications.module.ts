@@ -7,11 +7,14 @@ import { EmailModule } from '../email/email.module';
 import { MulterModule } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
-
+import { AiServiceModule } from '../ai/ai-service.module';
+import { AiModule } from '../ai/ai.module';
 @Module({
   imports: [
     PrismaModule,
     EmailModule,
+    AiModule,
+    AiServiceModule,
     MulterModule.register({
       storage: diskStorage({
         destination: './uploads/cvs',
