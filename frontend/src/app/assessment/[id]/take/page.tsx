@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useAuth } from '../../../contexts/auth-context';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { useAuth } from '../../../../contexts/auth-context';
 import { useRouter, useParams } from 'next/navigation';
-import { Button } from '../../../components/ui/button';
+import { Button } from '../../../../components/ui/button';
 import toast from 'react-hot-toast';
-import { Clock, CheckCircle, AlertCircle, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Clock, CheckCircle, AlertCircle, Loader2, ChevronRight, ShieldAlert } from 'lucide-react';
 
 interface Question {
   id: string;
@@ -34,6 +34,11 @@ interface AssessmentData {
   }[];
 }
 
+// Per-question time budgets — tune here.
+const MCQ_TIME_SECONDS = 90;   // 1.5 min per MCQ
+const OPEN_TIME_SECONDS = 180; // 3 min per open question
+const MAX_TAB_SWITCH_WARNINGS = 3;
+
 export default function TakeAssessmentPage() {
   const { user, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
@@ -45,9 +50,15 @@ export default function TakeAssessmentPage() {
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, any>>({});
-  const [timeRemaining, setTimeRemaining] = useState<number>(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
+
+  // Per-question timer
+  const [questionTimeRemaining, setQuestionTimeRemaining] = useState<number>(0);
+
+  // Anti-cheat: tab/window switch tracking
+  const [tabSwitchCount, setTabSwitchCount] = useState(0);
+  const hasAutoSubmittedRef = useRef(false);
 
   useEffect(() => {
     if (!isLoading) {
@@ -65,10 +76,8 @@ export default function TakeAssessmentPage() {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
       const token = localStorage.getItem('accessToken');
 
-      const response = await fetch(`${API_URL}/api/assessments/candidate/${assessmentId}/take`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+      const response = await fetch(`${API_URL}/api/assessments/${assessmentId}/take`, {
+        headers: { 'Authorization': `Bearer ${token}` },
       });
 
       if (response.status === 401) {
@@ -92,13 +101,10 @@ export default function TakeAssessmentPage() {
             toast.success('You have already completed this assessment', {
               icon: 'ℹ️',
             });
-
             router.push(`/assessment/results/${existingAttempt.id}`);
             return;
           }
         }
-
-        setTimeRemaining(data.durationMinutes * 60);
       } else if (response.status === 404) {
         toast.error('Assessment not found');
         router.push('/dashboard');
@@ -120,9 +126,7 @@ export default function TakeAssessmentPage() {
       const token = localStorage.getItem('accessToken');
 
       const response = await fetch(`${API_URL}/api/attempts/${attemptId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: { 'Authorization': `Bearer ${token}` },
       });
 
       if (response.ok) {
@@ -142,18 +146,6 @@ export default function TakeAssessmentPage() {
     }
   };
 
-  useEffect(() => {
-    if (timeRemaining > 0 && hasStarted) {
-      const timer = setTimeout(() => {
-        setTimeRemaining(timeRemaining - 1);
-      }, 1000);
-      return () => clearTimeout(timer);
-    } else if (timeRemaining === 0 && hasStarted && assessment) {
-      toast.error('Time is up! Auto-submitting...');
-      handleSubmit();
-    }
-  }, [timeRemaining, hasStarted]);
-
   const startAssessment = async () => {
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
@@ -161,20 +153,14 @@ export default function TakeAssessmentPage() {
 
       const response = await fetch(`${API_URL}/api/attempts`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          campaignId: assessmentId,
-        }),
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ assessmentId: assessmentId }),
       });
 
       if (response.ok) {
         const data = await response.json();
         setAttemptId(data.id);
         setHasStarted(true);
-        setTimeRemaining(assessment!.durationMinutes * 60);
         toast.success('Assessment started!');
       } else {
         throw new Error('Failed to start assessment');
@@ -185,42 +171,47 @@ export default function TakeAssessmentPage() {
     }
   };
 
+  const currentQuestion = assessment?.questions[currentQuestionIndex];
+
   const handleAnswerChange = (questionId: string, value: any) => {
     setAnswers({ ...answers, [questionId]: value });
-    saveAnswer(questionId, value);
+    if (currentQuestion) {
+      saveAnswer(questionId, value, currentQuestion.type);
+    }
   };
 
-  const saveAnswer = async (questionId: string, value: any) => {
+  const saveAnswer = async (questionId: string, value: any, questionType: 'MCQ' | 'OPEN') => {
     if (!attemptId) return;
 
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
       const token = localStorage.getItem('accessToken');
 
-      const payload: any = {
-        questionId,
-      };
+      const payload: any = { questionId };
 
-      if (typeof value === 'string' && value.length > 100) {
+      if (questionType === 'OPEN') {
         payload.openAnswer = value;
       } else {
         payload.selectedOptionId = value;
       }
 
-      await fetch(`${API_URL}/api/attempts/${attemptId}/submit`, {
+      const res = await fetch(`${API_URL}/api/attempts/${attemptId}/submit`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(payload),
       });
+
+      if (!res.ok) {
+        console.error('Failed to save answer', res.status, await res.text());
+        toast.error('Failed to save your answer — please retry this question');
+      }
     } catch (error) {
       console.error('Error saving answer:', error);
+      toast.error('Failed to save your answer — please retry this question');
     }
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = useCallback(async () => {
     if (!attemptId) return;
 
     setIsSubmitting(true);
@@ -230,13 +221,10 @@ export default function TakeAssessmentPage() {
 
       const response = await fetch(`${API_URL}/api/attempts/${attemptId}/complete`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: { 'Authorization': `Bearer ${token}` },
       });
 
       if (response.ok) {
-        const data = await response.json();
         toast.success('Assessment submitted successfully!');
         router.push(`/assessment/results/${attemptId}`);
       } else {
@@ -248,19 +236,80 @@ export default function TakeAssessmentPage() {
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [attemptId, router]);
 
-  const handleNext = () => {
-    if (currentQuestionIndex < (assessment?.questions.length || 0) - 1) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1);
-    }
-  };
+  // Forward-only advance: used both by the Next button and by a per-question timeout.
+  const advanceQuestion = useCallback(() => {
+    if (!assessment) return;
 
-  const handlePrevious = () => {
-    if (currentQuestionIndex > 0) {
-      setCurrentQuestionIndex(currentQuestionIndex - 1);
+    if (currentQuestionIndex < assessment.questions.length - 1) {
+      setCurrentQuestionIndex((i) => i + 1);
+    } else {
+      // Last question — finishing it (by click or timeout) submits the whole attempt.
+      handleSubmit();
     }
-  };
+  }, [assessment, currentQuestionIndex, handleSubmit]);
+
+  // Reset the per-question timer whenever the question changes.
+  useEffect(() => {
+    if (!hasStarted || !currentQuestion) return;
+    const budget = currentQuestion.type === 'OPEN' ? OPEN_TIME_SECONDS : MCQ_TIME_SECONDS;
+    setQuestionTimeRemaining(budget);
+  }, [hasStarted, currentQuestionIndex, currentQuestion?.type]);
+
+  // Per-question countdown.
+  useEffect(() => {
+    if (!hasStarted || isSubmitting) return;
+    if (questionTimeRemaining <= 0) {
+      toast('Time\'s up for this question — moving on', { icon: '⏱️' });
+      advanceQuestion();
+      return;
+    }
+    const timer = setTimeout(() => setQuestionTimeRemaining((t) => t - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [questionTimeRemaining, hasStarted, isSubmitting, advanceQuestion]);
+
+  // Anti-cheat: tab switch / window blur detection.
+  // IMPORTANT: this effect ONLY increments the counter — no toasts, no submit calls
+  // inside the setState updater. Side effects live in the separate effect below,
+  // which is the correct place for them.
+  useEffect(() => {
+    if (!hasStarted) return;
+
+    const registerViolation = () => {
+      if (hasAutoSubmittedRef.current || isSubmitting) return;
+      setTabSwitchCount((count) => count + 1);
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') registerViolation();
+    };
+    const onBlur = () => registerViolation();
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('blur', onBlur);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('blur', onBlur);
+    };
+  }, [hasStarted, isSubmitting]);
+
+  // React to tabSwitchCount changes here — this is where side effects
+  // (toasts, auto-submit) belong, not inside the setState updater above.
+  useEffect(() => {
+    if (tabSwitchCount === 0 || hasAutoSubmittedRef.current) return;
+
+    if (tabSwitchCount >= MAX_TAB_SWITCH_WARNINGS) {
+      hasAutoSubmittedRef.current = true; // ensures this branch only ever runs once
+      toast.error('Too many tab switches detected — assessment submitted automatically.');
+      handleSubmit();
+    } else {
+      toast.error(
+        `Tab switch detected (${tabSwitchCount}/${MAX_TAB_SWITCH_WARNINGS}) — please stay on this page.`,
+      );
+    }
+  }, [tabSwitchCount, handleSubmit]);
 
   if (isLoading || loading) {
     return (
@@ -306,8 +355,10 @@ export default function TakeAssessmentPage() {
                   <p className="font-medium text-gray-900">{assessment.difficulty}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500">Duration</p>
-                  <p className="font-medium text-gray-900">{assessment.durationMinutes} minutes</p>
+                  <p className="text-sm text-gray-500">Per-question time</p>
+                  <p className="font-medium text-gray-900">
+                    ~{Math.round(MCQ_TIME_SECONDS / 60 * 10) / 10}min MCQ · ~{Math.round(OPEN_TIME_SECONDS / 60 * 10) / 10}min Open
+                  </p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Questions</p>
@@ -322,10 +373,10 @@ export default function TakeAssessmentPage() {
                 Before You Start
               </h4>
               <ul className="text-sm text-yellow-700 mt-2 space-y-1 list-disc list-inside">
-                <li>Make sure you have a stable internet connection</li>
-                <li>You cannot pause the assessment once started</li>
-                <li>Your answers are auto-saved</li>
-                <li>Submit before the time runs out</li>
+                <li>Each question has its own timer — running out moves you to the next one</li>
+                <li>You can't go back to a previous question once you've moved on</li>
+                <li>Stay on this tab — switching away is flagged, and repeated switches auto-submit</li>
+                <li>Your answers are auto-saved as you go</li>
               </ul>
             </div>
 
@@ -342,12 +393,19 @@ export default function TakeAssessmentPage() {
     );
   }
 
-  const currentQuestion = assessment.questions[currentQuestionIndex];
+  if (!currentQuestion) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
+      </div>
+    );
+  }
+
   const progress = ((currentQuestionIndex + 1) / assessment.questions.length) * 100;
   const answeredCount = Object.keys(answers).length;
-  const minutes = Math.floor(timeRemaining / 60);
-  const seconds = timeRemaining % 60;
-  const isTimeLow = timeRemaining < 60;
+  const qMinutes = Math.floor(questionTimeRemaining / 60);
+  const qSeconds = questionTimeRemaining % 60;
+  const isTimeLow = questionTimeRemaining < 20;
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -358,12 +416,19 @@ export default function TakeAssessmentPage() {
               <div className={`flex items-center ${isTimeLow ? 'text-red-600' : 'text-gray-700'}`}>
                 <Clock className="w-5 h-5 mr-2" />
                 <span className="font-mono text-lg font-bold">
-                  {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
+                  {String(qMinutes).padStart(2, '0')}:{String(qSeconds).padStart(2, '0')}
                 </span>
+                <span className="ml-2 text-xs text-gray-400">this question</span>
               </div>
               <div className="text-sm text-gray-500">
                 Question {currentQuestionIndex + 1} of {assessment.questions.length}
               </div>
+              {tabSwitchCount > 0 && (
+                <div className="flex items-center text-xs text-red-600">
+                  <ShieldAlert className="w-4 h-4 mr-1" />
+                  {tabSwitchCount}/{MAX_TAB_SWITCH_WARNINGS} tab switches
+                </div>
+              )}
             </div>
             <div className="flex items-center space-x-4">
               <span className="text-sm text-gray-500">
@@ -442,17 +507,7 @@ export default function TakeAssessmentPage() {
             </div>
           )}
 
-          <div className="flex justify-between mt-8">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handlePrevious}
-              disabled={currentQuestionIndex === 0}
-            >
-              <ChevronLeft className="w-4 h-4 mr-2" />
-              Previous
-            </Button>
-
+          <div className="flex justify-end mt-8">
             {currentQuestionIndex === assessment.questions.length - 1 ? (
               <Button
                 onClick={handleSubmit}
@@ -463,26 +518,13 @@ export default function TakeAssessmentPage() {
                 <CheckCircle className="w-4 h-4 ml-2" />
               </Button>
             ) : (
-              <Button onClick={handleNext}>
+              <Button onClick={advanceQuestion}>
                 Next
                 <ChevronRight className="w-4 h-4 ml-2" />
               </Button>
             )}
           </div>
         </div>
-
-        {answeredCount < assessment.questions.length &&
-         currentQuestionIndex === assessment.questions.length - 1 && (
-          <div className="mt-4 p-4 bg-yellow-50 rounded-lg border border-yellow-200 flex items-start space-x-3">
-            <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-medium text-yellow-800">
-                You have {assessment.questions.length - answeredCount} unanswered questions
-              </p>
-              <p className="text-sm text-yellow-700">Please review all questions before submitting</p>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

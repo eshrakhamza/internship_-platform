@@ -15,15 +15,17 @@ import { Difficulty, Theme, UserRole } from '@prisma/client';
 export class AssessmentsController {
   constructor(private readonly assessmentsService: AssessmentsService) {}
 
+  // --- Static/candidate routes MUST come before ':id' so they aren't
+  // swallowed by the catch-all dynamic param route below. ---
 
-  @Get(':id/candidate-suggestions')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.RECRUITER, UserRole.ADMIN)
-  @ApiOperation({ summary: 'Get AI-matched candidates for this assessment theme' })
-  async getCandidateSuggestions(@Param('id') id: string) {
-    return this.assessmentsService.getCandidateSuggestions(id);
+  @Get('available')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get available assessments for candidate' })
+  @ApiResponse({ status: 200, description: 'Available assessments' })
+  async getAvailableAssessments(@Req() req: any) {
+    return this.assessmentsService.getAvailableAssessments(req.user.id);
   }
-  
+
   @Post('preview-questions')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.RECRUITER, UserRole.ADMIN)
@@ -37,7 +39,8 @@ export class AssessmentsController {
       body.mcqCount || 5,
       body.openCount || 2,
     );
-  } 
+  }
+
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.RECRUITER, UserRole.ADMIN)
@@ -60,21 +63,22 @@ export class AssessmentsController {
     return this.assessmentsService.findAll(page, limit, status);
   }
 
-  @Get(':id')
-  @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Get assessment by ID' })
-  @ApiResponse({ status: 200, description: 'Assessment details' })
-  async findOne(@Param('id') id: string) {
-    return this.assessmentsService.findOne(id);
-  }
+  // --- ':id/...' routes (multi-segment, no conflict with 'available') ---
 
-  @Put(':id')
+  @Get(':id/candidate-suggestions')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.RECRUITER, UserRole.ADMIN)
-  @ApiOperation({ summary: 'Update assessment' })
-  @ApiResponse({ status: 200, description: 'Assessment updated successfully' })
-  async update(@Param('id') id: string, @Body() updateDto: UpdateAssessmentDto) {
-    return this.assessmentsService.update(id, updateDto);
+  @ApiOperation({ summary: 'Get AI-matched candidates for this assessment theme' })
+  async getCandidateSuggestions(@Param('id') id: string) {
+    return this.assessmentsService.getCandidateSuggestions(id);
+  }
+
+  @Get(':id/take')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get assessment for taking' })
+  @ApiResponse({ status: 200, description: 'Assessment details' })
+  async getAssessmentForTaking(@Param('id') id: string, @Req() req: any) {
+    return this.assessmentsService.getAssessmentForTaking(id, req.user.id);
   }
 
   @Post(':id/publish')
@@ -95,6 +99,25 @@ export class AssessmentsController {
     return this.assessmentsService.getResults(id);
   }
 
+  // --- bare ':id' MUST be last among GET routes on this resource ---
+
+  @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Get assessment by ID' })
+  @ApiResponse({ status: 200, description: 'Assessment details' })
+  async findOne(@Param('id') id: string) {
+    return this.assessmentsService.findOne(id);
+  }
+
+  @Put(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.RECRUITER, UserRole.ADMIN)
+  @ApiOperation({ summary: 'Update assessment' })
+  @ApiResponse({ status: 200, description: 'Assessment updated successfully' })
+  async update(@Param('id') id: string, @Body() updateDto: UpdateAssessmentDto) {
+    return this.assessmentsService.update(id, updateDto);
+  }
+
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.RECRUITER, UserRole.ADMIN)
@@ -103,20 +126,4 @@ export class AssessmentsController {
   async delete(@Param('id') id: string) {
     return this.assessmentsService.delete(id);
   }
-
-  @Get('candidate/available')
-@UseGuards(JwtAuthGuard)
-@ApiOperation({ summary: 'Get available assessments for candidate' })
-@ApiResponse({ status: 200, description: 'Available assessments' })
-async getAvailableAssessments(@Req() req: any) {
-  return this.assessmentsService.getAvailableAssessments(req.user.id);
-}
-
-@Get('candidate/:id/take')
-@UseGuards(JwtAuthGuard)
-@ApiOperation({ summary: 'Get assessment for taking' })
-@ApiResponse({ status: 200, description: 'Assessment details' })
-async getAssessmentForTaking(@Param('id') id: string, @Req() req: any) {
-  return this.assessmentsService.getAssessmentForTaking(id, req.user.id);
-}
 }

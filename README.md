@@ -16,12 +16,12 @@ The platform lets recruiters publish internship postings and lets candidates bui
 
 The system is split into three main services plus a shared database layer:
 
-| Service | Role |
-|---|---|
-| **NestJS backend** | REST API, auth (JWT + OTP), business logic, job queues, orchestrates all AI calls through an internal `AiServiceClient` |
-| **Next.js frontend** | Candidate and recruiter-facing web app |
-| **FastAPI AI microservice** | Owns every LLM/embedding call: CV analysis, matching explanations, assessment generation & grading, job posting drafts |
-| **PostgreSQL + Prisma** | Single source of truth, shared schema managed via Prisma migrations |
+| Service                     | Role                                                                                                                    |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| **NestJS backend**          | REST API, auth (JWT + OTP), business logic, job queues, orchestrates all AI calls through an internal `AiServiceClient` |
+| **Next.js frontend**        | Candidate and recruiter-facing web app                                                                                  |
+| **FastAPI AI microservice** | Owns every LLM/embedding call: CV analysis, matching explanations, assessment generation & grading, job posting drafts  |
+| **PostgreSQL + Prisma**     | Single source of truth, shared schema managed via Prisma migrations                                                     |
 
 **Key architectural rule:** all LLM calls live exclusively in the FastAPI service. The NestJS backend never calls an LLM provider directly — it always goes through `AiServiceClient`, authenticated internally via a shared `X-Internal-Key` header. This keeps AI logic swappable and isolated from core business logic.
 
@@ -41,8 +41,8 @@ The system is split into three main services plus a shared database layer:
 - **Assessment pipeline** — end-to-end: AI-generated questions → candidate test-taking → tab-switch detection (anti-cheat) → AI grading → recruiter results dashboard
 - **Smart candidate picker** — AI-assisted shortlist when publishing an assessment
 - **Auth** — JWT with refresh tokens, OTP-based email verification
-- *(In progress)* Google Calendar integration for deadline suggestions
-- *(Exploratory)* LangGraph-based agent module (ReAct loop, persistent memory via `PostgresSaver`/`PostgresStore`, MCP tool exposure of platform endpoints) as a future addition to the AI microservice
+- _(In progress)_ Google Calendar integration for deadline suggestions
+- _(Exploratory)_ LangGraph-based agent module (ReAct loop, persistent memory via `PostgresSaver`/`PostgresStore`, MCP tool exposure of platform endpoints) as a future addition to the AI microservice
 
 ## CV Processing Pipeline
 
@@ -146,36 +146,13 @@ uvicorn app.main:app --reload
 
 > Note: OCR fallback requires Tesseract installed on the machine (with the `eng` and `fra` language packs), since `pytesseract` shells out to the local binary.
 
-### Tests (from `backend/`)
-
-```bash
-# unit tests
-npm run test
-
-# e2e tests
-npm run test:e2e
-
-# coverage
-npm run test:cov
-```
-
 ## Environment Variables
 
-| Variable | Used by | Description |
-|---|---|---|
-| `DATABASE_URL` | NestJS, Prisma | PostgreSQL connection string |
-| `AI_SERVICE_URL` | NestJS | Base URL of the FastAPI service (must include `/api/v1`) |
-| `X_INTERNAL_KEY` | NestJS, FastAPI | Shared secret for internal service-to-service auth |
-| `JWT_SECRET` / `JWT_REFRESH_SECRET` | NestJS | Auth token signing |
-| `GROQ_API_KEY` | FastAPI | Primary LLM provider |
-| `GEMINI_API_KEY` | FastAPI | Fallback LLM provider |
-
-## Roadmap
-
-- [ ] Finish and test Google Calendar deadline suggestions
-- [ ] Evaluate LangGraph agent module as an extension of the FastAPI service
-- [ ] Expand recruiter analytics on assessment results
-
-## Author
-
-**Ichrak Hamza** — Software Engineering student at ISIMM (Institut Supérieur d'Informatique et de Mathématiques de Monastir)
+| Variable                            | Used by         | Description                                              |
+| ----------------------------------- | --------------- | -------------------------------------------------------- |
+| `DATABASE_URL`                      | NestJS, Prisma  | PostgreSQL connection string                             |
+| `AI_SERVICE_URL`                    | NestJS          | Base URL of the FastAPI service (must include `/api/v1`) |
+| `X_INTERNAL_KEY`                    | NestJS, FastAPI | Shared secret for internal service-to-service auth       |
+| `JWT_SECRET` / `JWT_REFRESH_SECRET` | NestJS          | Auth token signing                                       |
+| `GROQ_API_KEY`                      | FastAPI         | Primary LLM provider                                     |
+| `GEMINI_API_KEY`                    | FastAPI         | Fallback LLM provider                                    |

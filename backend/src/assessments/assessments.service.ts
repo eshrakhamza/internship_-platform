@@ -16,7 +16,26 @@ export class AssessmentsService {
     private readonly emailService: EmailService,
     private readonly aiServiceClient: AiServiceClient,
   ) {}
-
+  async getAssessmentForTaking(assessmentId: string, userId: string) {
+    const candidate = await this.prisma.candidate.findUnique({ where: { userId } });
+    if (!candidate) throw new NotFoundException('Candidate not found');
+  
+    const assessment = await this.prisma.assessmentCampaign.findUnique({
+      where: { id: assessmentId },
+      include: {
+        questions: { include: { options: true }, orderBy: { order: 'asc' } },
+        attempts: { where: { candidateId: candidate.id } },
+      },
+    });
+  
+    if (!assessment) throw new NotFoundException('Assessment not found');
+  
+    if (assessment.attempts.length === 0) {
+      throw new NotFoundException('You are not invited to this assessment');
+    }
+  
+    return assessment;
+  }
   // Create a new assessment
   async create(userId: string, createDto: CreateAssessmentDto) {
     this.logger.log(`Creating assessment for user: ${userId}`);
@@ -334,114 +353,7 @@ export class AssessmentsService {
   }
   // Add to AssessmentsService
 
-async getAvailableAssessments(userId: string) {
-  const candidate = await this.prisma.candidate.findUnique({
-    where: { userId },
-  });
 
-  if (!candidate) {
-    throw new NotFoundException('Candidate not found');
-  }
-
-  // Get published assessments where candidate hasn't completed yet
-  const assessments = await this.prisma.assessmentCampaign.findMany({
-    where: {
-      status: 'PUBLISHED',
-      attempts: {
-        none: {
-          candidateId: candidate.id,
-          status: 'COMPLETED',
-        },
-      },
-    },
-    include: {
-      questions: {
-        include: {
-          options: true,
-        },
-      },
-      _count: {
-        select: {
-          questions: true,
-        },
-      },
-    },
-  });
-
-  return assessments;
-}
-
-async getAssessmentForTaking(assessmentId: string, userId: string) {
-  const candidate = await this.prisma.candidate.findUnique({
-    where: { userId },
-  });
-
-  if (!candidate) {
-    throw new NotFoundException('Candidate not found');
-  }
-
-  // Get or create attempt
-  let attempt = await this.prisma.attempt.findFirst({
-    where: {
-      candidateId: candidate.id,
-      campaignId: assessmentId,
-      status: 'IN_PROGRESS',
-    },
-  });
-
-  if (!attempt) {
-    // Check if already completed
-    const completed = await this.prisma.attempt.findFirst({
-      where: {
-        candidateId: candidate.id,
-        campaignId: assessmentId,
-        status: 'COMPLETED',
-      },
-    });
-
-    if (completed) {
-      throw new BadRequestException('You have already completed this assessment');
-    }
-
-    // Create new attempt
-    attempt = await this.prisma.attempt.create({
-      data: {
-        candidateId: candidate.id,
-        campaignId: assessmentId,
-        status: 'IN_PROGRESS',
-        startedAt: new Date(),
-      },
-    });
-  }
-
-  // Get assessment with questions
-  const assessment = await this.prisma.assessmentCampaign.findUnique({
-    where: { id: assessmentId },
-    include: {
-      questions: {
-        include: {
-          options: true,
-        },
-        orderBy: { order: 'asc' },
-      },
-      attempts: {
-        where: {
-          candidateId: candidate.id,
-        },
-      },
-    },
-  });
-
-  if (!assessment) {
-    throw new NotFoundException('Assessment not found');
-  }
-
-  return {
-    ...assessment,
-    attemptId: attempt.id,
-    attemptStatus: attempt.status,
-  };
-}
 async previewQuestions(theme: Theme, difficulty: Difficulty, mcqCount: number, openCount: number) {
   try {
     const result = await this.aiServiceClient.generateQuestions(theme, difficulty, mcqCount, openCount);
@@ -475,4 +387,28 @@ async getCandidateSuggestions(id: string) {
     explanation: a.recommendationExplanation,
   }));
 }
+
+
+async getAvailableAssessments(userId: string) {
+  const candidate = await this.prisma.candidate.findUnique({ where: { userId } });
+  if (!candidate) throw new NotFoundException('Candidate not found');
+
+  const assessments = await this.prisma.assessmentCampaign.findMany({
+    where: {
+      status: 'PUBLISHED',
+      attempts: {
+        some: { candidateId: candidate.id },        // must have been invited
+        none: { candidateId: candidate.id, status: 'COMPLETED' }, // and not finished
+      },
+    },
+    include: {
+      questions: { include: { options: true } },
+      _count: { select: { questions: true } },
+    },
+  });
+
+  return assessments;
+}
+
+
 }

@@ -35,6 +35,12 @@ interface ResultData {
   answers: AnswerDetail[];
 }
 
+interface AiFeedback {
+  strengths: string[];
+  weaknesses: string[];
+  recommendations: string[];
+}
+
 export default function AssessmentResultsPage() {
   const { user, isAuthenticated, isLoading } = useAuth();
   const router = useRouter();
@@ -43,6 +49,10 @@ export default function AssessmentResultsPage() {
 
   const [loading, setLoading] = useState(true);
   const [results, setResults] = useState<ResultData | null>(null);
+
+  const [aiFeedback, setAiFeedback] = useState<AiFeedback | null>(null);
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [feedbackError, setFeedbackError] = useState(false);
 
   useEffect(() => {
     if (!isLoading) {
@@ -54,16 +64,20 @@ export default function AssessmentResultsPage() {
     }
   }, [isAuthenticated, isLoading]);
 
+  useEffect(() => {
+    if (results && results.attempt.status !== undefined) {
+      fetchAiFeedback();
+    }
+  }, [results]);
+
   const fetchResults = async () => {
     setLoading(true);
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
       const token = localStorage.getItem('accessToken');
-      
+
       const response = await fetch(`${API_URL}/api/attempts/${attemptId}/results`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+        headers: { 'Authorization': `Bearer ${token}` },
       });
 
       if (response.ok) {
@@ -80,6 +94,30 @@ export default function AssessmentResultsPage() {
       toast.error('Failed to load results');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAiFeedback = async () => {
+    setFeedbackLoading(true);
+    setFeedbackError(false);
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const token = localStorage.getItem('accessToken');
+
+      const response = await fetch(`${API_URL}/api/attempts/${attemptId}/feedback`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        setAiFeedback(await response.json());
+      } else {
+        setFeedbackError(true);
+      }
+    } catch (error) {
+      console.error('Error fetching AI feedback:', error);
+      setFeedbackError(true);
+    } finally {
+      setFeedbackLoading(false);
     }
   };
 
@@ -121,8 +159,8 @@ export default function AssessmentResultsPage() {
   return (
     <div className="min-h-screen bg-gray-50 py-12">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        <Button 
-          variant="outline" 
+        <Button
+          variant="outline"
           className="mb-6"
           onClick={() => router.push('/dashboard')}
         >
@@ -245,23 +283,44 @@ export default function AssessmentResultsPage() {
           </div>
         )}
 
-        {/* ============================================
-            TODO: AI Feedback (Future FastAPI Microservice)
-            ============================================ */}
         <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-100">
           <div className="flex items-start space-x-3">
             <TrendingUp className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-            <div>
-              <h4 className="font-medium text-gray-900">AI-Generated Feedback</h4>
-              <p className="text-sm text-gray-600 mt-1">
-                AI feedback will be available once reviewed by the recruiter.
-                This feature will be implemented in the FastAPI microservice.
-              </p>
-              {/*
-                Future FastAPI integration:
-                GET /api/ai/feedback/{attemptId}
-                Returns: { strengths: string[], weaknesses: string[], recommendations: string[] }
-              */}
+            <div className="flex-1">
+              <h4 className="font-medium text-gray-900 mb-2">AI-Generated Feedback</h4>
+
+              {feedbackLoading && (
+                <p className="text-sm text-gray-600">Generating feedback...</p>
+              )}
+
+              {feedbackError && !feedbackLoading && (
+                <p className="text-sm text-gray-600">
+                  AI feedback isn't available right now — please check back later.
+                </p>
+              )}
+
+              {aiFeedback && !feedbackLoading && (
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-sm font-medium text-green-700">Strengths</p>
+                    <ul className="text-sm text-gray-700 list-disc list-inside">
+                      {aiFeedback.strengths.map((s, i) => <li key={i}>{s}</li>)}
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-red-700">Areas to improve</p>
+                    <ul className="text-sm text-gray-700 list-disc list-inside">
+                      {aiFeedback.weaknesses.map((w, i) => <li key={i}>{w}</li>)}
+                    </ul>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-blue-700">Recommendations</p>
+                    <ul className="text-sm text-gray-700 list-disc list-inside">
+                      {aiFeedback.recommendations.map((r, i) => <li key={i}>{r}</li>)}
+                    </ul>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

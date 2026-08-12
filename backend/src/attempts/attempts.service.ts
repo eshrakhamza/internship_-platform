@@ -27,48 +27,83 @@ export class AttemptsService {
 
   async create(candidateId: string, campaignId: string) {
     const existingAttempt = await this.prisma.attempt.findFirst({
-      where: {
-        candidateId,
-        campaignId,
-        status: {
-          in: [AttemptStatus.IN_PROGRESS, AttemptStatus.COMPLETED],
-        },
-      },
+      where: { candidateId, campaignId },
     });
-
-    if (existingAttempt) {
-      if (existingAttempt.status === AttemptStatus.COMPLETED) {
-        throw new BadRequestException('You have already completed this assessment');
-      }
-      if (existingAttempt.status === AttemptStatus.IN_PROGRESS) {
-        return existingAttempt;
-      }
+  
+    if (!existingAttempt) {
+      throw new NotFoundException('You are not invited to this assessment');
     }
-
-    const attempt = await this.prisma.attempt.create({
-      data: {
-        candidateId,
-        campaignId,
-        status: AttemptStatus.IN_PROGRESS,
-        startedAt: new Date(),
-      },
+  
+    if (existingAttempt.status === AttemptStatus.COMPLETED) {
+      throw new BadRequestException('You have already completed this assessment');
+    }
+  
+    if (existingAttempt.status === AttemptStatus.TIMED_OUT) {
+      throw new BadRequestException('This assessment attempt has timed out');
+    }
+  
+    if (existingAttempt.status === AttemptStatus.IN_PROGRESS) {
+      return this.findOne(existingAttempt.id);
+    }
+  
+    // Any other status (invited but not yet started) -> start it now
+    const attempt = await this.prisma.attempt.update({
+      where: { id: existingAttempt.id },
+      data: { status: AttemptStatus.IN_PROGRESS, startedAt: new Date() },
       include: {
         campaign: {
           include: {
-            questions: {
-              include: {
-                options: true,
-              },
-              orderBy: { order: 'asc' },
-            },
+            questions: { include: { options: true }, orderBy: { order: 'asc' } },
           },
         },
       },
     });
-
-    this.logger.log(`Attempt created: ${attempt.id}`);
+  
+    this.logger.log(`Attempt started: ${attempt.id}`);
     return attempt;
   }
+
+
+
+
+
+
+
+
+
+
+
+
+
+  async getAiFeedback(attemptId: string) {
+    const attempt = await this.findOne(attemptId);
+  
+    if (attempt.status !== AttemptStatus.COMPLETED && attempt.status !== AttemptStatus.TIMED_OUT) {
+      throw new BadRequestException('Attempt not completed yet');
+    }
+  
+    const answersPayload = attempt.answers.map(a => ({
+      question: a.question.questionText,
+      answer: a.selectedOption?.optionText ?? a.openAnswer ?? '(no answer)',
+      isCorrect: a.question.type === QuestionType.MCQ ? (a.selectedOption?.isCorrect ?? false) : undefined,
+      score: a.score ?? undefined,
+    }));
+  
+    try {
+      return await this.aiService.getAttemptFeedback({
+        assessmentTitle: attempt.campaign.title,
+        theme: attempt.campaign.theme,
+        mcqScore: attempt.mcqScore ?? 0,
+        openScore: attempt.openQuestionsScore ?? 0,
+        totalScore: attempt.totalScore ?? 0,
+        answers: answersPayload,
+      });
+    } catch (error) {
+      this.logger.warn(`AI feedback failed for attempt ${attemptId}: ${error.message}`);
+      throw new BadRequestException('AI feedback is temporarily unavailable — please try again shortly');
+    }
+  }
+ 
 
   async findOne(id: string) {
     const attempt = await this.prisma.attempt.findUnique({

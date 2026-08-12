@@ -40,6 +40,10 @@ const NAV_LINKS = {
     { href: '/apply', label: 'Apply', icon: FileText },
     { href: '/assessment', label: 'Assessment', icon: ClipboardList },
   ],
+  ADMIN: [
+    { href: '/admin/dashboard', label: 'Dashboard', icon: BarChart3 },
+    { href: '/admin/users', label: 'Users', icon: Users },
+  ],
 };
 
 export function Navbar() {
@@ -56,9 +60,14 @@ export function Navbar() {
 
   if (!isAuthenticated) return null;
 
-  const isRecruiter = user?.role === 'RECRUITER' || user?.role === 'ADMIN';
+
+
+  const isAdmin = user?.role === 'ADMIN';
+  const isRecruiter = user?.role === 'RECRUITER';
   const isCandidate = user?.role === 'CANDIDATE';
-  const links = isRecruiter ? NAV_LINKS.RECRUITER : isCandidate ? NAV_LINKS.CANDIDATE : [];
+  const links = isAdmin ? NAV_LINKS.ADMIN : isRecruiter ? NAV_LINKS.RECRUITER : isCandidate ? NAV_LINKS.CANDIDATE : [];
+
+
 
   const getInitials = () => {
     const f = user?.firstName?.[0] || '';

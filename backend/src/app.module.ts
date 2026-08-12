@@ -18,7 +18,7 @@ import { PostingsModule } from './postings/postings.module'; // Add this
 import { BullModule } from '@nestjs/bullmq';
 import { ConfigService } from '@nestjs/config';
 import { MatchingModule } from './matching/matching.module';
-
+import { AdminModule } from './admin/admin.module';
 @Module({
   imports: [
     ConfigModule,
@@ -31,6 +31,7 @@ import { MatchingModule } from './matching/matching.module';
     AttemptsModule,
     AiModule,
     EmailModule,
+    AdminModule,
     UploadsModule,
     MatchingModule,
     PostingsModule, // Add this

@@ -19,6 +19,15 @@ export class AttemptsController {
     const candidate = await this.attemptsService.getCandidateByUserId(req.user.id);
     return this.attemptsService.create(candidate.id, createDto.campaignId);
   }
+
+
+
+  @Get(':id/feedback')
+@UseGuards(JwtAuthGuard)
+@ApiOperation({ summary: 'Get AI-generated feedback for a completed attempt' })
+async getAiFeedback(@Param('id') id: string) {
+  return this.attemptsService.getAiFeedback(id);
+}
   @Get('my/history')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Get candidate's completed assessment attempts" })

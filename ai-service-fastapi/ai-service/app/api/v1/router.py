@@ -11,9 +11,14 @@ from app.api.v1.endpoints import (
     structuring,
     postings,
     assessments, 
+    feedback,
 )
 
+# ...
+
 api_router = APIRouter()
+
+api_router.include_router(feedback.router,  prefix="/feedback", tags=["feedback"])
 api_router.include_router(postings.router, prefix="/postings", tags=["postings"])  # <-- router (not routes), and fix spacing
 api_router.include_router(analysis.router, prefix="/analysis", tags=["analysis"])
 api_router.include_router(extraction.router, prefix="/extraction", tags=["extraction"])

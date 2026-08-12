@@ -12,7 +12,12 @@ import { firstValueFrom } from 'rxjs';
 
 
 // ... dans la classe AiServiceClient ...
-
+export interface AttemptFeedbackResponse {
+  strengths: string[];
+  weaknesses: string[];
+  recommendations: string[];
+  source: 'groq' | 'gemini';
+}
 
 export interface ExtractionResponse {
   text: string;
@@ -270,5 +275,33 @@ export class AiServiceClient {
     return data;
   }
 
-
+  async getAttemptFeedback(payload: {
+    assessmentTitle: string;
+    theme: string;
+    mcqScore: number;
+    openScore: number;
+    totalScore: number;
+    answers: { question: string; answer: string; isCorrect?: boolean; score?: number }[];
+  }): Promise<AttemptFeedbackResponse> {
+    const { data } = await firstValueFrom(
+      this.http.post<AttemptFeedbackResponse>(
+        '/feedback/attempt',
+        {
+          assessment_title: payload.assessmentTitle,
+          theme: payload.theme,
+          mcq_score: payload.mcqScore,
+          open_score: payload.openScore,
+          total_score: payload.totalScore,
+          answers: payload.answers.map(a => ({
+            question: a.question,
+            answer: a.answer,
+            is_correct: a.isCorrect,
+            score: a.score,
+          })),
+        },
+        { headers: this.headers },
+      ),
+    );
+    return data;
+  }
 }

@@ -46,9 +46,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // Redirect based on role if on login page
             const pathname = window.location.pathname;
             if (pathname === '/login' || pathname === '/') {
-              if (parsedUser.role === 'RECRUITER' || parsedUser.role === 'ADMIN') {
+              if (parsedUser.role === 'RECRUITER' ) {
                 window.location.href = '/recruiter/dashboard';
-              } else {
+              } else if( parsedUser.role === 'ADMIN') {
+                window.location.href = '/admin/dashboard';
+              } else  {
                 window.location.href = '/dashboard';
               }
             }
@@ -80,9 +82,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     console.log('✅ Login successful:', user.email);
     
     // Redirect based on role
-    if (user.role === 'RECRUITER' || user.role === 'ADMIN') {
+    if (user.role === 'RECRUITER' ) {
       window.location.href = '/recruiter/dashboard';
-    } else {
+    } else if ( user.role === 'ADMIN') {
+      window.location.href = '/admin/dashboard';
+    }else {
       window.location.href = '/dashboard';
     }
   };

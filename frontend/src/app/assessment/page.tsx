@@ -50,7 +50,7 @@ export default function CandidateAssessmentsPage() {
     setLoading(true);
     try {
       const [availRes, historyRes] = await Promise.all([
-        fetch(`${API_URL}/api/assessments/candidate/available`, { headers: authHeaders() }),
+        fetch(`${API_URL}/api/assessments/available`, { headers: authHeaders() }),
         fetch(`${API_URL}/api/attempts/my/history`, { headers: authHeaders() }),
       ]);
 
@@ -96,7 +96,7 @@ export default function CandidateAssessmentsPage() {
             {available.map((a) => (
               <Link
                 key={a.id}
-                href={`/assessment/${a.id}`}
+                href={`/assessment/${a.id}/take`}
                 className="flex items-center justify-between bg-white rounded-xl border border-gray-100 p-5 hover:border-blue-300 hover:shadow-sm transition-all"
               >
                 <div>
